@@ -428,16 +428,21 @@ def load_active_targets(conn) -> list[dict]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT DISTINCT
+            SELECT
                 t.id,
                 t.kind,
                 t.value,
                 t.normalized_value,
                 cs.last_guid
             FROM targets t
-            INNER JOIN subscriptions s ON s.target_id = t.id
-            INNER JOIN clients c ON c.id = s.client_id AND c.status = 'active'
             LEFT JOIN crawl_state cs ON cs.target_id = t.id
+            WHERE EXISTS (
+                SELECT 1
+                FROM subscriptions s
+                INNER JOIN clients c ON c.id = s.client_id
+                WHERE s.target_id = t.id
+                  AND c.status = 'active'
+            )
             ORDER BY t.kind, LOWER(t.value)
             """
         )
