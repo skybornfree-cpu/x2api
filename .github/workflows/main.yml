@@ -89,7 +89,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
           RETENTION_DAYS: '30'
-          MAX_RECORDS: '5000'
+          MAX_RECORDS: '20000'
           SHARD_INDEX: ${{ matrix.shard }}
           SHARD_COUNT: ${{ needs.prepare.outputs.shard_count }}
         run: |

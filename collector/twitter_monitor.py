@@ -26,7 +26,7 @@ QUERY_RESULTS_DIR = DATA_DIR / "query_results"
 INSTANCES_FILE = PROJECT_ROOT / "instances.json"
 
 DEFAULT_RETENTION_DAYS = int(os.environ.get("RETENTION_DAYS", "30"))
-DEFAULT_MAX_RECORDS = int(os.environ.get("MAX_RECORDS", "2000"))
+DEFAULT_MAX_RECORDS = int(os.environ.get("MAX_RECORDS", "20000"))
 AUTO_TRANSLATE = os.environ.get("TRANSLATE_CONTENT", "false").lower() == "true"
 IMGBB_API_KEY = os.environ.get("IMGBB_API_KEY", "").strip()
 
