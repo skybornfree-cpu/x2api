@@ -15,7 +15,7 @@ on:
       max_records:
         description: '最大保留记录数'
         required: false
-        default: '50000'
+        default: '100000'
 
 jobs:
   cleanup:
@@ -43,7 +43,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           RETENTION_DAYS: ${{ inputs.retention_days || '30' }}
-          MAX_RECORDS: ${{ inputs.max_records || '50000' }}
+          MAX_RECORDS: ${{ inputs.max_records || '100000' }}
         run: |
           python twitter_monitor.py cleanup \
             --retention-days "${RETENTION_DAYS}" \

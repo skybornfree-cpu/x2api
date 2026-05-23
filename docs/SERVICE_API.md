@@ -902,7 +902,7 @@ DATABASE_URL=... python3 scripts/backfill_video_tags.py --apply --limit 100
 - 普通视频保留 30 天
 - 公共池视频保留 60 天
 - 高分视频保留 90 天，默认 `score >= 20`
-- 主内容表超量保护默认保留 50000 条，并优先保留高分视频、公共池视频和普通视频
+- 主内容表超量保护默认保留 100000 条，并优先保留高分视频、公共池视频和普通视频
 
 删除 `items` 时，关联的 `item_tags`、`video_stats`、`feed_events` 会通过外键级联清理。
 
