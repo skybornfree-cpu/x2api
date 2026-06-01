@@ -29,6 +29,7 @@ export type ItemRecord = {
   target: string;
   kind: "user" | "keyword";
   category: string | null;
+  isSensitive: boolean;
   tags: string[];
   author: string | null;
   fullname: string | null;
@@ -106,6 +107,7 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
       END AS target,
       t.kind,
       tp.category,
+      COALESCE(cat.is_sensitive, FALSE) AS "isSensitive",
       COALESCE((
         SELECT ARRAY_AGG(DISTINCT tag_name ORDER BY tag_name)
         FROM (
@@ -143,6 +145,7 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
     INNER JOIN targets t ON t.id = s.target_id
     INNER JOIN items i ON i.target_id = t.id
     LEFT JOIN target_profiles tp ON tp.target_id = t.id
+    LEFT JOIN categories cat ON cat.slug = tp.category
     WHERE s.client_id = ${query.clientId}
       AND (
         ${searchText}::text IS NULL
@@ -223,6 +226,7 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
       target,
       kind,
       category,
+      "isSensitive",
       tags,
       author,
       fullname,
@@ -292,6 +296,7 @@ export async function listItemsByFeedToken(feedToken: string, limit = 50) {
         END AS target,
         t.kind,
         tp.category,
+        COALESCE(cat.is_sensitive, FALSE) AS "isSensitive",
         COALESCE((
           SELECT ARRAY_AGG(DISTINCT tag_name ORDER BY tag_name)
           FROM (
@@ -330,6 +335,7 @@ export async function listItemsByFeedToken(feedToken: string, limit = 50) {
       INNER JOIN targets t ON t.id = s.target_id
       INNER JOIN items i ON i.target_id = t.id
       LEFT JOIN target_profiles tp ON tp.target_id = t.id
+      LEFT JOIN categories cat ON cat.slug = tp.category
       WHERE c.feed_token = ${feedToken}
         AND c.status = 'active'
     ),
@@ -343,6 +349,7 @@ export async function listItemsByFeedToken(feedToken: string, limit = 50) {
       target,
       kind,
       category,
+      "isSensitive",
       tags,
       author,
       fullname,

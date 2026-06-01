@@ -546,6 +546,7 @@ curl -sS "$X2API_BASE/api/items?limit=10&cursor=eyJ2IjoxLCJwYXlsb2FkIjp7Li4ufX0"
       "target": "search:特朗普",
       "kind": "keyword",
       "category": "news",
+      "isSensitive": false,
       "tags": ["特朗普", "美国政治"],
       "author": "some_author",
       "fullname": "Some Author",
@@ -581,6 +582,8 @@ curl -sS "$X2API_BASE/api/items?limit=10&cursor=eyJ2IjoxLCJwYXlsb2FkIjp7Li4ufX0"
   - `user` 或 `keyword`
 - `category`
   - 目标分类 slug，来自 `target_profiles.category`
+- `isSensitive`
+  - 分类是否为敏感分类，来自 `categories.is_sensitive`
 - `tags`
   - item 标签和目标画像标签的合并结果
 - `author`
