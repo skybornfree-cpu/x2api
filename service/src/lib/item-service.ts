@@ -104,46 +104,9 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
   const visibleItems = sql`
     SELECT
       i.id,
-      CASE
-        WHEN t.source = 'youtube' THEN 'youtube:' || t.value
-        WHEN t.kind = 'keyword' THEN 'search:' || t.value
-        ELSE t.value
-      END AS target,
-      t.source,
-      t.kind,
-      tp.category,
-      COALESCE(cat.is_sensitive, FALSE) AS "isSensitive",
-      COALESCE((
-        SELECT ARRAY_AGG(DISTINCT tag_name ORDER BY tag_name)
-        FROM (
-          SELECT tag.name AS tag_name
-          FROM item_tags it
-          INNER JOIN tags tag ON tag.id = it.tag_id
-          WHERE it.item_id = i.id
-          UNION
-          SELECT profile_tag.name AS tag_name
-          FROM jsonb_array_elements_text(COALESCE(tp.tags, '[]'::jsonb)) AS profile_tag(name)
-        ) tag_values
-      ), ARRAY[]::text[]) AS tags,
-      i.author,
-      i.fullname,
-      i.title,
-      i.content,
-      i.raw_content AS "rawContent",
-      i.translated_content AS "translatedContent",
-      i.link,
-      i.x_url AS "xUrl",
-      ARRAY(
-        SELECT jsonb_array_elements_text(i.images)
-      ) AS images,
-      i.video_url AS "videoUrl",
-      i.expires_at AS "expiresAt",
-      i.video_url_expires_at AS "videoUrlExpiresAt",
-      i.published_at AS "publishedAt",
       i.stored_at AS "storedAt",
       COALESCE(i.published_at, i.stored_at) AS "sortTime",
       i.guid,
-      i.is_retweet AS "isRetweet",
       ROW_NUMBER() OVER (
         PARTITION BY i.guid
         ORDER BY COALESCE(i.published_at, i.stored_at) DESC, i.stored_at DESC, i.id DESC
@@ -152,7 +115,6 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
     INNER JOIN targets t ON t.id = s.target_id
     INNER JOIN items i ON i.target_id = t.id
     LEFT JOIN target_profiles tp ON tp.target_id = t.id
-    LEFT JOIN categories cat ON cat.slug = tp.category
     WHERE s.client_id = ${query.clientId}
       AND (
         i.expires_at > NOW()
@@ -235,49 +197,75 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
       SELECT *
       FROM visible_items
       WHERE "dedupeRank" = 1
-    )
-    SELECT
-      id,
-      target,
-      kind,
-      source,
-      category,
-      "isSensitive",
-      tags,
-      author,
-      fullname,
-      title,
-      content,
-      "rawContent",
-      "translatedContent",
-      link,
-      "xUrl",
-      images,
-      "videoUrl",
-      "expiresAt",
-      "videoUrlExpiresAt",
-      "publishedAt",
-      "storedAt",
-      "sortTime",
-      guid,
-      "isRetweet"
-    FROM deduped_items
-    WHERE (
-      ${cursor?.sortTime ?? null}::timestamptz IS NULL
-      OR (
-        ROW(
-          "sortTime",
-          "storedAt",
-          id
-        ) < ROW(
-          ${cursor?.sortTime ?? null}::timestamptz,
-          ${cursor?.storedAt ?? null}::timestamptz,
-          ${cursor?.id ?? null}::uuid
+    ),
+    ordered_items AS (
+      SELECT id, "storedAt", "sortTime", guid
+      FROM deduped_items
+      WHERE (
+        ${cursor?.sortTime ?? null}::timestamptz IS NULL
+        OR (
+          ROW(
+            "sortTime",
+            "storedAt",
+            id
+          ) < ROW(
+            ${cursor?.sortTime ?? null}::timestamptz,
+            ${cursor?.storedAt ?? null}::timestamptz,
+            ${cursor?.id ?? null}::uuid
+          )
         )
       )
+      ORDER BY "sortTime" DESC, "storedAt" DESC, id DESC
+      LIMIT ${limit + 1}
     )
-    ORDER BY "sortTime" DESC, "storedAt" DESC, id DESC
-    LIMIT ${limit + 1}
+    SELECT
+      i.id,
+      CASE
+        WHEN t.source = 'youtube' THEN 'youtube:' || t.value
+        WHEN t.kind = 'keyword' THEN 'search:' || t.value
+        ELSE t.value
+      END AS target,
+      t.kind,
+      t.source,
+      tp.category,
+      COALESCE(cat.is_sensitive, FALSE) AS "isSensitive",
+      COALESCE((
+        SELECT ARRAY_AGG(DISTINCT tag_name ORDER BY tag_name)
+        FROM (
+          SELECT tag.name AS tag_name
+          FROM item_tags it
+          INNER JOIN tags tag ON tag.id = it.tag_id
+          WHERE it.item_id = i.id
+          UNION
+          SELECT profile_tag.name AS tag_name
+          FROM jsonb_array_elements_text(COALESCE(tp.tags, '[]'::jsonb)) AS profile_tag(name)
+        ) tag_values
+      ), ARRAY[]::text[]) AS tags,
+      i.author,
+      i.fullname,
+      i.title,
+      i.content,
+      i.raw_content AS "rawContent",
+      i.translated_content AS "translatedContent",
+      i.link,
+      i.x_url AS "xUrl",
+      ARRAY(
+        SELECT jsonb_array_elements_text(i.images)
+      ) AS images,
+      i.video_url AS "videoUrl",
+      i.expires_at AS "expiresAt",
+      i.video_url_expires_at AS "videoUrlExpiresAt",
+      i.published_at AS "publishedAt",
+      i.stored_at AS "storedAt",
+      oi."sortTime",
+      i.guid,
+      i.is_retweet AS "isRetweet"
+    FROM ordered_items oi
+    INNER JOIN items i ON i.id = oi.id
+    INNER JOIN targets t ON t.id = i.target_id
+    LEFT JOIN target_profiles tp ON tp.target_id = t.id
+    LEFT JOIN categories cat ON cat.slug = tp.category
+    ORDER BY oi."sortTime" DESC, oi."storedAt" DESC, oi.id DESC
   `);
 
   const page = buildCursorPage({
