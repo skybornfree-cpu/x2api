@@ -87,6 +87,9 @@ CREATE INDEX IF NOT EXISTS idx_items_target_id_stored_at ON items (target_id, st
 CREATE INDEX IF NOT EXISTS idx_items_stored_at ON items (stored_at DESC);
 CREATE INDEX IF NOT EXISTS idx_items_published_at ON items (published_at DESC);
 CREATE INDEX IF NOT EXISTS idx_items_video_feed ON items (stored_at DESC) WHERE video_url IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_items_video_feed_sort_time
+    ON items ((COALESCE(published_at, stored_at)) DESC, stored_at DESC, id DESC)
+    WHERE video_url IS NOT NULL AND video_url <> '';
 CREATE INDEX IF NOT EXISTS idx_items_expires_at ON items (expires_at);
 CREATE INDEX IF NOT EXISTS idx_items_video_url_expires_at ON items (video_url_expires_at);
 
