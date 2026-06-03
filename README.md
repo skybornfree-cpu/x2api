@@ -74,7 +74,7 @@ DATABASE_URL=... python3 collector/twitter_monitor.py register-client --label "l
 ```bash
 DATABASE_URL=... python3 collector/twitter_monitor.py subscribe set \
   --api-key "x2d_xxx" \
-  --targets "OpenAI,search:AI safety"
+  --targets "OpenAI,search:AI safety,youtube:https://www.youtube.com/feeds/videos.xml?user=CaspianReport"
 ```
 
 ### 5. 运行采集
@@ -143,6 +143,7 @@ Authorization: Bearer x2d_xxx
 ```
 
 `targets` 仍兼容字符串；新客户端建议使用对象格式。对象格式的 `category` 必填，来自 `/api/videos/categories`，`tags` 可由用户自由输入。
+YouTube 目标既支持 `youtube:UC...`，也支持 `youtube:https://www.youtube.com/feeds/videos.xml?channel_id=UC...`、`youtube:https://www.youtube.com/feeds/videos.xml?user=...` 和 `youtube:https://www.youtube.com/feeds/videos.xml?playlist_id=...`。
 
 ### `POST /api/subscriptions`
 

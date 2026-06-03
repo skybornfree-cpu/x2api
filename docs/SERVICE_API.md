@@ -339,7 +339,7 @@ curl -sS "$X2API_BASE/api/subscriptions" \
     {
       "source": "youtube",
       "kind": "channel",
-      "target": "UCE_M8A5yxnLfW0KghEeajjw",
+      "target": "https://www.youtube.com/feeds/videos.xml?user=CaspianReport",
       "category": "tech",
       "tags": ["YouTube"]
     }
@@ -353,7 +353,7 @@ curl -sS "$X2API_BASE/api/subscriptions" \
 curl -sS -X PUT "$X2API_BASE/api/subscriptions" \
   -H "Authorization: Bearer $X2API_KEY" \
   -H "Content-Type: application/json" \
-  --data '{"targets":[{"target":"search:特朗普","category":"news","tags":["特朗普","美国政治"]},{"source":"youtube","kind":"channel","target":"UCE_M8A5yxnLfW0KghEeajjw","category":"tech","tags":["YouTube"]}]}'
+  --data '{"targets":[{"target":"search:特朗普","category":"news","tags":["特朗普","美国政治"]},{"source":"youtube","kind":"channel","target":"https://www.youtube.com/feeds/videos.xml?user=CaspianReport","category":"tech","tags":["YouTube"]}]}'
 ```
 
 #### 成功响应
@@ -384,8 +384,8 @@ curl -sS -X PUT "$X2API_BASE/api/subscriptions" \
 - 服务端会自动去重
 - 新对象格式中 `category` 必填，使用 `/api/videos/categories` 返回的 `slug`，也兼容分类中文名
 - `source` 支持 `twitter` 和 `youtube`；旧字符串目标默认按 `twitter` 解析
-- `kind` 支持 `user`、`keyword`、`channel`；`youtube` 目前只支持 `channel`
-- `target` 支持 `"search:关键词"`、用户名、`"youtube:UC..."`；对象格式下 YouTube channel 推荐传纯 `UC...` channel ID
+- `kind` 支持 `user`、`keyword`、`channel`；`youtube` 目标按 channel 语义存储
+- `target` 支持 `"search:关键词"`、用户名、`"youtube:UC..."`，也支持 `"youtube:https://www.youtube.com/feeds/videos.xml?channel_id=..."`、`"youtube:https://www.youtube.com/feeds/videos.xml?user=..."` 和 `"youtube:https://www.youtube.com/feeds/videos.xml?playlist_id=..."`
 - `tags` 是用户自由输入标签，服务端会 trim、去重，并限制单个目标最多 12 个标签
 - 为兼容脚本和旧调用，`targets` 里仍可传字符串，例如 `"search:AI safety"`；字符串格式不会写入分类和标签
 
@@ -1069,6 +1069,6 @@ DATABASE_URL=... python3 scripts/cleanup_video_feed_data.py \
 ## 13. YouTube Collector 命令
 
 - `python collector/twitter_monitor.py monitor` 只抓取 Twitter/X 目标，不处理 YouTube，避免 YouTube resolver 影响 Twitter 抓取。
-- `python collector/twitter_monitor.py monitor-youtube` 单独抓取 `source = youtube` 的 channel RSS，并将 72 小时内的新视频写入解析队列。
+- `python collector/twitter_monitor.py monitor-youtube` 单独抓取 `source = youtube` 的 RSS 目标（channel ID 或 YouTube feed URL），并将 72 小时内的新视频写入解析队列。
 - `python collector/twitter_monitor.py refresh-youtube-playback-urls --limit 30 --refresh-window-minutes 90 --critical-window-minutes 15` 单独刷新即将过期的 YouTube 播放 URL 并补处理未解析队列。
 - 对应 workflow：`youtube-monitor.yml` 负责 RSS 抓取，`youtube-playback-refresh.yml` 负责播放 URL 保鲜；当前两者都配置为每 10 分钟运行一次，也支持手动 `workflow_dispatch`。
