@@ -1614,25 +1614,32 @@ def monitor_youtube_target(conn, target_row: dict) -> int:
     entries, channel_id = fetch_youtube_rss_entries(target_row["value"], fetched_at=fetched_at)
     if not entries:
         upsert_crawl_state(conn, target_row["id"], last_guid=target_row.get("last_guid"), last_error="No YouTube RSS entries returned.", success=False)
+        print(f"[{format_target_row(target_row)}] fetched=0 eligible=0 skipped_existing=0 queue_inserted=0 queue_checked=0 resolved=0")
         return 0
     latest_guid: str | None = target_row.get("last_guid")
     latest_published_at: datetime | None = None
-    queued = 0
+    eligible_count = 0
+    skipped_existing_count = 0
+    enqueue_inserted_count = 0
+    fetch_count = len(entries)
     for entry in entries:
         payload = make_youtube_queue_payload(target_row, entry, fetched_at, channel_id)
         if payload is None:
             continue
+        eligible_count += 1
         payload_published_at = parse_datetime(payload.get("published_at"))
         if payload_published_at is not None and (latest_published_at is None or payload_published_at > latest_published_at):
             latest_published_at = payload_published_at
             latest_guid = payload["guid"]
         if item_exists_for_guid(conn, target_row["id"], payload["guid"]):
+            skipped_existing_count += 1
             continue
         if enqueue_youtube_payload(conn, payload):
-            queued += 1
+            enqueue_inserted_count += 1
     conn.commit()
 
     resolved_count = 0
+    checked_queue_count = 0
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -1648,12 +1655,18 @@ def monitor_youtube_target(conn, target_row: dict) -> int:
             (target_row["id"],),
         )
         rows = cur.fetchall()
+        checked_queue_count = len(rows)
     for row in rows:
         if resolve_youtube_queue_row(conn, row):
             resolved_count += 1
         conn.commit()
 
     upsert_crawl_state(conn, target_row["id"], last_guid=latest_guid or target_row.get("last_guid"), last_error=None, success=True)
+    print(
+        f"[{format_target_row(target_row)}] fetched={fetch_count} eligible={eligible_count} "
+        f"skipped_existing={skipped_existing_count} queue_inserted={enqueue_inserted_count} "
+        f"queue_checked={checked_queue_count} resolved={resolved_count}"
+    )
     return resolved_count
 
 
