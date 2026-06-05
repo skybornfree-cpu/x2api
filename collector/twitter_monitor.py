@@ -2636,6 +2636,7 @@ def monitor_cg91_site(conn, *, base_url: str, max_pages: int, retention_hours: i
     verified_count = 0
     parsed_videos = 0
     skipped_existing = 0
+    skipped_detail_errors = 0
     skipped_unverified = 0
     pages = 0
     samples = []
@@ -2649,6 +2650,7 @@ def monitor_cg91_site(conn, *, base_url: str, max_pages: int, retention_hours: i
         page_updated = 0
         page_verified = 0
         page_unverified = 0
+        page_detail_errors = 0
         page_parsed_videos = 0
         print(f"[91cg] page={pages} list_items={len(list_items)} url={page_url}")
         if not list_items:
@@ -2658,7 +2660,13 @@ def monitor_cg91_site(conn, *, base_url: str, max_pages: int, retention_hours: i
             if list_item.get("published_at") and list_item["published_at"] < cutoff:
                 page_old += 1
                 continue
-            detail = parse_cg91_detail_page(list_item["url"], list_item)
+            try:
+                detail = parse_cg91_detail_page(list_item["url"], list_item)
+            except Exception as exc:
+                skipped_detail_errors += 1
+                page_detail_errors += 1
+                print(f"[91cg] skip detail {list_item.get('url')}: {exc}")
+                continue
             if not detail["players"]:
                 continue
             page_parsed_videos += len(detail["players"])
@@ -2691,12 +2699,13 @@ def monitor_cg91_site(conn, *, base_url: str, max_pages: int, retention_hours: i
             upsert_crawl_state(conn, target_row["id"], last_guid=latest_guid, last_error=None, success=True)
         print(
             f"[91cg] page={pages} parsed_videos={page_parsed_videos} verified={page_verified} "
-            f"inserted={page_inserted} updated={page_updated} existing={page_existing} old={page_old} unverified={page_unverified}"
+            f"inserted={page_inserted} updated={page_updated} existing={page_existing} old={page_old} "
+            f"detail_errors={page_detail_errors} unverified={page_unverified}"
         )
         if not next_url:
             break
         page_url = next_url
-    return {"pages": pages, "parsed_videos": parsed_videos, "verified": verified_count, "inserted": inserted, "updated": updated, "skipped_existing": skipped_existing, "skipped_unverified": skipped_unverified, "samples": samples[:10]}
+    return {"pages": pages, "parsed_videos": parsed_videos, "verified": verified_count, "inserted": inserted, "updated": updated, "skipped_existing": skipped_existing, "skipped_detail_errors": skipped_detail_errors, "skipped_unverified": skipped_unverified, "samples": samples[:10]}
 
 
 def refresh_cg91_playback_urls(conn, limit: int, refresh_window_minutes: int, critical_window_minutes: int) -> dict[str, int]:
@@ -2873,13 +2882,13 @@ def monitor_baoliao51_site(conn, *, base_url: str, max_pages: int, retention_hou
     target_row = None if dry_run else ensure_baoliao51_target(conn, base_url, public_pool=public_pool)
     page_url = base_url + "/"
     cutoff = now_utc() - timedelta(hours=retention_hours)
-    inserted = updated = parsed_videos = verified_count = skipped_existing = skipped_unverified = pages = 0
+    inserted = updated = parsed_videos = verified_count = skipped_existing = skipped_detail_errors = skipped_unverified = pages = 0
     samples = []
     latest_guid = None
     for _ in range(max_pages):
         pages += 1
         list_items, next_url = parse_baoliao51_list_page(base_url, page_url)
-        page_inserted = page_existing = page_old = page_updated = page_verified = page_unverified = page_parsed_videos = 0
+        page_inserted = page_existing = page_old = page_updated = page_verified = page_detail_errors = page_unverified = page_parsed_videos = 0
         print(f"[51baoliao] page={pages} list_items={len(list_items)} url={page_url}")
         if not list_items:
             print(f"[51baoliao] page={pages} empty_list stop=true")
@@ -2888,7 +2897,13 @@ def monitor_baoliao51_site(conn, *, base_url: str, max_pages: int, retention_hou
             if list_item.get("published_at") and list_item["published_at"] < cutoff:
                 page_old += 1
                 continue
-            detail = parse_baoliao51_detail_page(list_item["url"], list_item)
+            try:
+                detail = parse_baoliao51_detail_page(list_item["url"], list_item)
+            except Exception as exc:
+                skipped_detail_errors += 1
+                page_detail_errors += 1
+                print(f"[51baoliao] skip detail {list_item.get('url')}: {exc}")
+                continue
             page_parsed_videos += len(detail["players"])
             parsed_videos += len(detail["players"])
             for player in detail["players"]:
@@ -2911,12 +2926,13 @@ def monitor_baoliao51_site(conn, *, base_url: str, max_pages: int, retention_hou
             upsert_crawl_state(conn, target_row["id"], last_guid=latest_guid, last_error=None, success=True)
         print(
             f"[51baoliao] page={pages} parsed_videos={page_parsed_videos} verified={page_verified} "
-            f"inserted={page_inserted} updated={page_updated} existing={page_existing} old={page_old} unverified={page_unverified}"
+            f"inserted={page_inserted} updated={page_updated} existing={page_existing} old={page_old} "
+            f"detail_errors={page_detail_errors} unverified={page_unverified}"
         )
         if not next_url:
             break
         page_url = next_url
-    return {"pages": pages, "parsed_videos": parsed_videos, "verified": verified_count, "inserted": inserted, "updated": updated, "skipped_existing": skipped_existing, "skipped_unverified": skipped_unverified, "samples": samples[:10]}
+    return {"pages": pages, "parsed_videos": parsed_videos, "verified": verified_count, "inserted": inserted, "updated": updated, "skipped_existing": skipped_existing, "skipped_detail_errors": skipped_detail_errors, "skipped_unverified": skipped_unverified, "samples": samples[:10]}
 
 
 def refresh_baoliao51_playback_urls(conn, limit: int, refresh_window_minutes: int, critical_window_minutes: int) -> dict[str, int]:
