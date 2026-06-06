@@ -2641,6 +2641,45 @@ def extract_cg91_json_ld(soup: BeautifulSoup) -> dict:
     return {}
 
 
+def clean_site_text(value: str | None) -> str:
+    text = re.sub(r"\s+", " ", value or "").strip()
+    return text.replace("|51爆料网", "").strip(" -|｜\t\r\n")
+
+
+def extract_meta_description(soup: BeautifulSoup, entity: dict) -> str:
+    for selector in ('meta[name="description"]', 'meta[property="og:description"]'):
+        meta = soup.select_one(selector)
+        content = meta.get("content") if meta else None
+        if isinstance(content, str) and content.strip():
+            return clean_site_text(content)
+    description = entity.get("description") if isinstance(entity.get("description"), str) else ""
+    return clean_site_text(description)
+
+
+def extract_site_post_body(soup: BeautifulSoup) -> str:
+    content_scope = soup.select_one(".post-content") or soup.select_one("article.post")
+    if not content_scope:
+        return ""
+    for removable in content_scope.select("script,style,iframe,ins,div.dplayer"):
+        removable.decompose()
+    text = clean_site_text(content_scope.get_text(" ", strip=True))
+    markers = (
+        "👥 官方交流群",
+        "点击加入",
+        "获取最新网址",
+        "最新地址",
+        "永久地址",
+    )
+    for marker in markers:
+        index = text.find(marker)
+        if index >= 0:
+            text = text[index + len(marker) :].strip()
+    email_match = re.search(r"\[email\s*protected\]", text, flags=re.IGNORECASE)
+    if email_match:
+        text = text[email_match.end() :].strip()
+    return clean_site_text(text)
+
+
 def extract_cg91_page_id(url: str) -> str:
     match = re.search(r"/archives/(\d+)/?", urlparse(url).path)
     if not match:
@@ -2702,7 +2741,7 @@ def parse_cg91_detail_page(detail_url: str, list_item: dict | None = None) -> di
     title = (title_el.get_text(" ", strip=True) if title_el else None) or (list_item or {}).get("title") or "91吃瓜视频"
     published_at = parse_datetime(entity.get("datePublished")) or (list_item or {}).get("published_at") or now_utc()
     modified_at = parse_datetime(entity.get("dateModified"))
-    description = entity.get("description") if isinstance(entity.get("description"), str) else ""
+    description = extract_meta_description(soup, entity) or extract_site_post_body(soup)
     image_value = entity.get("image")
     image = image_value.get("url") if isinstance(image_value, dict) and isinstance(image_value.get("url"), str) else image_value
     image = image if isinstance(image, str) else None
@@ -3042,7 +3081,7 @@ def parse_baoliao51_detail_page(detail_url: str, list_item: dict | None = None) 
     title = (title_el.get_text(" ", strip=True) if title_el else None) or (list_item or {}).get("title") or "51爆料视频"
     published_at = parse_datetime(entity.get("datePublished")) or (list_item or {}).get("published_at") or now_utc()
     modified_at = parse_datetime(entity.get("dateModified"))
-    description = entity.get("description") if isinstance(entity.get("description"), str) else ""
+    description = extract_meta_description(soup, entity) or extract_site_post_body(soup)
     image_value = entity.get("image")
     image = image_value.get("url") if isinstance(image_value, dict) and isinstance(image_value.get("url"), str) else image_value
     image = image if isinstance(image, str) else None
