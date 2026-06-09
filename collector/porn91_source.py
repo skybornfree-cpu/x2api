@@ -315,8 +315,7 @@ def parse_detail_page(detail_page_url: str, list_item: dict | None = None) -> di
     source = extract_video_source(soup, detail_page_url)
 
     title = detail_title(soup, non_empty((list_item or {}).get("title")))
-    description_node = soup.select_one("#v_desc")
-    description = non_empty(description_node.get_text(" ", strip=True) if description_node else None) or title
+    description = title
     poster = soup.select_one("video[poster]")
     image = normalize_asset_url(detail_page_url, poster.get("poster") if poster else None) or (list_item or {}).get("image")
     runtime = parse_duration_seconds(first_info_value(soup, "Runtime")) or (list_item or {}).get("duration")
@@ -508,6 +507,25 @@ def item_exists_for_guid(conn, target_id: str, guid: str) -> bool:
         return cur.fetchone() is not None
 
 
+def update_existing_item_text(conn, target_id: str, guid: str, title: str | None) -> None:
+    text = non_empty(title)
+    if not text:
+        return
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE items
+            SET title = %s,
+                content = %s,
+                raw_content = %s,
+                translated_content = NULL,
+                stored_at = stored_at
+            WHERE target_id = %s AND guid = %s
+            """,
+            (text, text, text, target_id, guid),
+        )
+
+
 def upsert_crawl_state(conn, target_id: str, *, last_guid: str | None, last_error: str | None, success: bool) -> None:
     with conn.cursor() as cur:
         cur.execute(
@@ -537,7 +555,7 @@ def build_author_presentation(link: str) -> dict[str, str | None]:
 def upsert_video_item(conn, target_row: dict, detail: dict, player: dict, verified: dict, retention_hours: int) -> bool:
     published_at = detail.get("published_at") or now_utc()
     expires_at = published_at + timedelta(hours=retention_hours)
-    content = detail.get("description") or detail.get("title") or player.get("video_title")
+    content = detail.get("title") or player.get("video_title") or PORN91_SITE_NAME
     images = [detail["image"]] if detail.get("image") else []
     presentation = build_author_presentation(detail["url"])
     metadata = {
@@ -603,7 +621,7 @@ def upsert_video_item(conn, target_row: dict, detail: dict, player: dict, verifi
                 presentation["author_profile_platform"],
                 player.get("video_title") or detail.get("title"),
                 content,
-                detail.get("title"),
+                content,
                 detail["url"],
                 Jsonb(images),
                 verified["video_url"],
@@ -638,6 +656,7 @@ def monitor_site(conn, *, base_url: str, max_pages: int, retention_hours: int, p
                 page_old += 1
                 continue
             if target_row and item_exists_for_guid(conn, str(target_row["id"]), list_item["guid"]):
+                update_existing_item_text(conn, str(target_row["id"]), list_item["guid"], list_item.get("title"))
                 skipped_existing += 1
                 page_existing += 1
                 continue
