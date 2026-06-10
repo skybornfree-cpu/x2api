@@ -147,6 +147,27 @@ def format_target_row(target_row: dict) -> str:
     return f"91rb:{target_row['value']}"
 
 
+def origin_header(url: str | None) -> str | None:
+    raw = non_empty(url)
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def playback_headers(referer: str | None) -> dict[str, str]:
+    raw_referer = non_empty(referer)
+    if not raw_referer:
+        return {}
+    result = {"Referer": raw_referer}
+    origin = origin_header(raw_referer)
+    if origin:
+        result["Origin"] = origin
+    return result
+
+
 def headers(referer: str | None = None, *, accept: str | None = None, range_header: str | None = None) -> dict[str, str]:
     result = {
         "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125 Safari/537.36",
@@ -155,6 +176,10 @@ def headers(referer: str | None = None, *, accept: str | None = None, range_head
     }
     if referer:
         result["Referer"] = referer
+        if accept:
+            origin = origin_header(referer)
+            if origin:
+                result["Origin"] = origin
     if range_header:
         result["Range"] = range_header
     return result
@@ -327,7 +352,7 @@ def extract_source_candidates(html: str, page_url: str) -> list[dict[str, str | 
             video_type = "mp4"
         else:
             return
-        candidates.append({"video_url": video_url, "video_type": video_type, "label": label})
+        candidates.append({"video_url": video_url, "video_type": video_type, "label": label, "referer": page_url})
 
     for source in soup.select("video source[src], source[src]"):
         add(source.get("src"), non_empty(source.get("label")) or non_empty(source.get("res")))
@@ -448,6 +473,7 @@ def verify_hls_url(video_url: str, referer: str, expected_duration: int | None =
             if has_media_signature(chunk):
                 return {
                     "video_url": video_url,
+                    "playback_headers": playback_headers(referer),
                     "video_url_expires_at": expires_at or RB91_STABLE_VIDEO_URL_EXPIRES_AT,
                     "playback_refresh_required": expires_at is not None,
                     "media_format": "hls",
@@ -499,6 +525,7 @@ def verify_mp4_url(video_url: str, referer: str, expected_duration: int | None =
 
     return {
         "video_url": video_url,
+        "playback_headers": playback_headers(referer),
         "video_url_expires_at": expires_at or RB91_STABLE_VIDEO_URL_EXPIRES_AT,
         "playback_refresh_required": expires_at is not None,
         "media_format": "mp4",
@@ -589,6 +616,7 @@ def parse_detail_page(detail_page_url: str, list_item: dict | None = None) -> di
                 "video_title": title,
                 "video_url": candidate["video_url"],
                 "video_type": candidate["video_type"],
+                "referer": candidate.get("referer") or detail_page_url,
                 "label": candidate.get("label"),
             }
         )
@@ -696,6 +724,7 @@ def upsert_video_item(conn, target_row: dict, detail: dict, player: dict, verifi
         "date_modified": detail.get("modified_at").isoformat() if detail.get("modified_at") else None,
         "resolver": "91rb-public-player",
         "resolved_at": now_iso(),
+        "playback_headers": verified.get("playback_headers"),
         "video_url_expires_at": verified["video_url_expires_at"].isoformat(),
         "playback_refresh_required": verified.get("playback_refresh_required"),
         "content_type": verified.get("content_type"),
@@ -796,7 +825,7 @@ def monitor_site(conn, *, base_url: str, max_pages: int, retention_hours: int, p
             verified_for_item = False
             for player in detail["players"]:
                 try:
-                    verified = verify_playback_url(player["video_url"], detail["url"], player["video_type"], detail.get("duration"))
+                    verified = verify_playback_url(player["video_url"], player.get("referer") or detail["url"], player["video_type"], detail.get("duration"))
                 except Exception as exc:
                     skipped_unverified += 1
                     page_unverified += 1
@@ -815,6 +844,7 @@ def monitor_site(conn, *, base_url: str, max_pages: int, retention_hours: int, p
                             "video_url": verified["video_url"],
                             "video_url_expires_at": verified["video_url_expires_at"].isoformat(),
                             "playback_refresh_required": verified.get("playback_refresh_required"),
+                            "playback_headers": verified.get("playback_headers"),
                             "media_format": verified.get("media_format"),
                             "playlist_duration_seconds": verified.get("playlist_duration_seconds"),
                             "content_type": verified.get("content_type"),

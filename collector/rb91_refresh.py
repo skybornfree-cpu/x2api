@@ -79,12 +79,13 @@ def refresh_playback_urls(conn, limit: int, refresh_window_minutes: int, critica
                 player = next((candidate for candidate in detail["players"] if candidate["video_id"] == video_id), None)
                 if not player:
                     raise ValueError("matching player not found")
-                verified = verify_playback_url(player["video_url"], detail["url"], player["video_type"], detail.get("duration"))
+                verified = verify_playback_url(player["video_url"], player.get("referer") or detail["url"], player["video_type"], detail.get("duration"))
                 if not verified.get("playback_refresh_required"):
                     skipped_static += 1
                 next_metadata = metadata | {
                     "resolver": "91rb-public-player",
                     "resolved_at": now_iso(),
+                    "playback_headers": verified.get("playback_headers"),
                     "source_url": detail["url"],
                     "rb91_video_id": detail["video_id"],
                     "video_url_expires_at": verified["video_url_expires_at"].isoformat(),

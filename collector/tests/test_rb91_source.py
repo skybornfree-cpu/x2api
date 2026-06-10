@@ -84,6 +84,13 @@ segment-2.ts?t=1781076186
 
         self.assertEqual(verified["media_format"], "hls")
         self.assertTrue(verified["playback_refresh_required"])
+        self.assertEqual(
+            verified["playback_headers"],
+            {
+                "Referer": "https://www.91rb.com/videos/319962/example-slug/",
+                "Origin": "https://www.91rb.com",
+            },
+        )
         self.assertEqual(verified["video_url_expires_at"], datetime(2026, 6, 10, 7, 23, 6, tzinfo=timezone.utc))
 
     def test_reject_ad_url_blocks_known_tracking_hosts(self):
