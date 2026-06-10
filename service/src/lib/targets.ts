@@ -1,4 +1,4 @@
-export type TargetSource = "twitter" | "youtube" | "heiliao" | "cg91" | "baoliao51" | "douyin" | "18mh" | "rou" | "dadaafa" | "18j" | "1mtif" | "tikporn" | "91porna" | "91porn" | "91rb" | "badnews" | "bdrq" | "avgood" | "705hs" | "xxxtik";
+export type TargetSource = "twitter" | "youtube" | "heiliao" | "cg91" | "baoliao51" | "douyin" | "18mh" | "rou" | "dadaafa" | "18j" | "1mtif" | "tikporn" | "91porna" | "91porn" | "91rb" | "badnews" | "bdrq" | "avgood" | "705hs" | "xxxtik" | "dirtyship";
 export type TargetKind = "user" | "keyword" | "channel" | "site";
 
 export type ParsedTarget = {
@@ -33,6 +33,7 @@ const BDRQ_DEFAULT_URL = "https://g3h4i5j6.bdrq45.cc";
 const AVGOOD_DEFAULT_URL = "https://avgood.com";
 const HS705_DEFAULT_URL = "https://705hs.com";
 const XXXTIK_DEFAULT_URL = "https://xxxtik.com";
+const DIRTYSHIP_DEFAULT_URL = "https://dirtyship.com";
 
 function normalizeHeiliaoTargetValue(raw: string) {
   const value = (raw.trim() || HEILIAO_DEFAULT_URL).replace(/\/+$/, "");
@@ -382,6 +383,25 @@ function isXxxTikTargetURL(raw: string) {
   }
 }
 
+function normalizeDirtyShipTargetValue(raw: string) {
+  const value = (raw.trim() || DIRTYSHIP_DEFAULT_URL).replace(/\/+$/, "");
+  const url = new URL(value.includes("://") ? value : `https://${value}`);
+  return `${url.protocol}//${url.host.toLowerCase()}`;
+}
+
+function isDirtyShipTargetURL(raw: string) {
+  try {
+    const value = raw.trim();
+    if (!value) {
+      return false;
+    }
+    const url = new URL(value.includes("://") ? value : `https://${value}`);
+    return url.host.toLowerCase() === "dirtyship.com" || url.host.toLowerCase() === "www.dirtyship.com";
+  } catch {
+    return false;
+  }
+}
+
 function normalizeYouTubeChannelID(raw: string) {
   const value = raw.trim();
   if (!value) {
@@ -552,6 +572,21 @@ export function parseTarget(raw: string): ParsedTarget {
   if (isXxxTikTargetURL(value)) {
     const normalized = normalizeXxxTikTargetValue(value);
     return { source: "xxxtik", kind: "site", value: normalized, normalizedValue: normalizeHeiliaoTargetKey(normalized), tags: [] };
+  }
+
+  if (value.toLowerCase().startsWith("dirtyship:")) {
+    const normalized = normalizeDirtyShipTargetValue(value.slice("dirtyship:".length));
+    return { source: "dirtyship", kind: "site", value: normalized, normalizedValue: normalizeHeiliaoTargetKey(normalized), tags: [] };
+  }
+
+  if (value.toLowerCase().startsWith("dirtyship.com:")) {
+    const normalized = normalizeDirtyShipTargetValue(value.slice("dirtyship.com:".length));
+    return { source: "dirtyship", kind: "site", value: normalized, normalizedValue: normalizeHeiliaoTargetKey(normalized), tags: [] };
+  }
+
+  if (isDirtyShipTargetURL(value)) {
+    const normalized = normalizeDirtyShipTargetValue(value);
+    return { source: "dirtyship", kind: "site", value: normalized, normalizedValue: normalizeHeiliaoTargetKey(normalized), tags: [] };
   }
 
   if (value.toLowerCase().startsWith("bdrq:")) {
@@ -818,6 +853,9 @@ export function formatTarget(target: ParsedTarget | { source?: TargetSource; kin
   if (target.source === "xxxtik") {
     return `xxxtik:${target.value}`;
   }
+  if (target.source === "dirtyship") {
+    return `dirtyship:${target.value}`;
+  }
   if (target.source === "bdrq") {
     return `bdrq:${target.value}`;
   }
@@ -985,6 +1023,9 @@ function normalizeTargetSource(rawSource: unknown): TargetSource {
     case "xxxtik":
     case "xxxtik.com":
       return "xxxtik";
+    case "dirtyship":
+    case "dirtyship.com":
+      return "dirtyship";
     case "bdrq":
     case "bdrq45":
     case "bdrq45.cc":
@@ -1128,6 +1169,12 @@ function normalizeTargetKind(rawKind: unknown, source: TargetSource): TargetKind
     }
     throw new Error("xxxtik targets must use site kind.");
   }
+  if (source === "dirtyship") {
+    if (kind === "site") {
+      return "site";
+    }
+    throw new Error("DirtyShip targets must use site kind.");
+  }
   if (source === "bdrq") {
     if (kind === "site") {
       return "site";
@@ -1222,6 +1269,9 @@ function parseObjectTarget(candidate: { source?: unknown; kind?: unknown; target
     parsed = { source, kind: "site", value: normalized, normalizedValue: normalizeHeiliaoTargetKey(normalized), tags: [] };
   } else if (source === "xxxtik") {
     const normalized = normalizeXxxTikTargetValue(candidate.target);
+    parsed = { source, kind: "site", value: normalized, normalizedValue: normalizeHeiliaoTargetKey(normalized), tags: [] };
+  } else if (source === "dirtyship") {
+    const normalized = normalizeDirtyShipTargetValue(candidate.target);
     parsed = { source, kind: "site", value: normalized, normalizedValue: normalizeHeiliaoTargetKey(normalized), tags: [] };
   } else if (source === "bdrq") {
     const normalized = normalizeBdrqTargetValue(candidate.target);

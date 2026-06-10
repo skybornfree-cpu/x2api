@@ -34,6 +34,7 @@ const DETAIL_LINK_PROFILE_PLATFORMS: Record<string, string> = {
   avgood: "AvGood",
   "705hs": "992KP",
   xxxtik: "xxxtik",
+  dirtyship: "DirtyShip",
 };
 
 export function buildAuthorPresentation(input: AuthorPresentationInput): AuthorPresentation {
@@ -116,6 +117,9 @@ export function normalizePresentationSource(value: string) {
     case "xxxtik":
     case "xxxtik.com":
       return "xxxtik";
+    case "dirtyship":
+    case "dirtyship.com":
+      return "dirtyship";
     case "bdrq":
     case "bdrq45":
     case "bdrq45.cc":
@@ -203,6 +207,8 @@ function sourceDisplayName(source: string) {
       return "992KP";
     case "xxxtik":
       return "xxxtik";
+    case "dirtyship":
+      return "DirtyShip";
     default:
       return source || "X";
   }

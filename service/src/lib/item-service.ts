@@ -127,7 +127,7 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
         i.expires_at > NOW()
       )
       AND (
-        t.source NOT IN ('youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik')
+        t.source NOT IN ('youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'dirtyship')
         OR i.video_url_expires_at > NOW() + INTERVAL '10 minutes'
       )
       AND (
@@ -158,12 +158,13 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
             WHEN t.source = 'avgood' THEN 'avgood:' || t.value
             WHEN t.source = '705hs' THEN '705hs:' || t.value
             WHEN t.source = 'xxxtik' THEN 'xxxtik:' || t.value
+            WHEN t.source = 'dirtyship' THEN 'dirtyship:' || t.value
             WHEN t.source = 'rou' THEN 'rou:' || t.value
             WHEN t.kind = 'keyword' THEN 'search:' || t.value
             ELSE t.value
           END
         ) = ${targetFilter}
-        OR (t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik') AND LOWER(t.source) = ${targetFilter})
+        OR (t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'dirtyship') AND LOWER(t.source) = ${targetFilter})
       )
       AND (
         ${sinceFilter}::timestamptz IS NULL
@@ -247,12 +248,12 @@ export async function listItems(query: ItemQuery): Promise<ListItemsResult> {
       i.id,
       CASE
         WHEN t.source = 'youtube' THEN 'youtube:' || t.value
-        WHEN t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik') THEN t.source
+        WHEN t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'dirtyship') THEN t.source
         WHEN t.kind = 'keyword' THEN 'search:' || t.value
         ELSE t.value
       END AS target,
       CASE
-        WHEN t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik') THEN t.value
+        WHEN t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'dirtyship') THEN t.value
         WHEN t.source = 'youtube' THEN 'https://www.youtube.com/channel/' || t.value
         WHEN t.source = 'twitter' AND t.kind = 'user' THEN 'https://x.com/' || t.value
         ELSE NULL
@@ -337,12 +338,12 @@ export async function listItemsByFeedToken(feedToken: string, limit = 50) {
         i.id,
         CASE
           WHEN t.source = 'youtube' THEN 'youtube:' || t.value
-          WHEN t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik') THEN t.source
+          WHEN t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'dirtyship') THEN t.source
           WHEN t.kind = 'keyword' THEN 'search:' || t.value
           ELSE t.value
         END AS target,
         CASE
-          WHEN t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik') THEN t.value
+          WHEN t.source IN ('heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'dirtyship') THEN t.value
           WHEN t.source = 'youtube' THEN 'https://www.youtube.com/channel/' || t.value
           WHEN t.source = 'twitter' AND t.kind = 'user' THEN 'https://x.com/' || t.value
           ELSE NULL
@@ -400,7 +401,7 @@ export async function listItemsByFeedToken(feedToken: string, limit = 50) {
         AND c.status = 'active'
         AND i.expires_at > NOW()
         AND (
-          t.source NOT IN ('youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik')
+          t.source NOT IN ('youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'dirtyship')
           OR i.video_url_expires_at > NOW() + INTERVAL '10 minutes'
         )
     ),

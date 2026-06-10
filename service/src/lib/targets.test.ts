@@ -263,6 +263,24 @@ test("parseTarget understands xxxtik site targets", () => {
   });
 });
 
+test("parseTarget understands DirtyShip site targets", () => {
+  assert.deepEqual(parseTarget("https://dirtyship.com/latest/"), {
+    source: "dirtyship",
+    kind: "site",
+    value: "https://dirtyship.com",
+    normalizedValue: "dirtyship.com",
+    tags: [],
+  });
+
+  assert.deepEqual(parseTarget("dirtyship:dirtyship.com/sample-video/"), {
+    source: "dirtyship",
+    kind: "site",
+    value: "https://dirtyship.com",
+    normalizedValue: "dirtyship.com",
+    tags: [],
+  });
+});
+
 test("parseTarget understands BDRQ site targets", () => {
   assert.deepEqual(parseTarget("https://g3h4i5j6.bdrq45.cc/vodtype/4.html"), {
     source: "bdrq",
@@ -527,6 +545,17 @@ test("parseTargets normalizes explicit source aliases", () => {
       kind: "site",
       value: "https://xxxtik.com",
       normalizedValue: "xxxtik.com",
+      category: "adult",
+      tags: [],
+    },
+  ]);
+
+  assert.deepEqual(parseTargets([{ source: "dirtyship.com", kind: "site", target: "dirtyship.com/sample-video/", category: "adult" }]), [
+    {
+      source: "dirtyship",
+      kind: "site",
+      value: "https://dirtyship.com",
+      normalizedValue: "dirtyship.com",
       category: "adult",
       tags: [],
     },
