@@ -191,3 +191,5 @@ YouTube 目标既支持 `youtube:UC...`，也支持 `youtube:https://www.youtube
 - 采集仍依赖第三方 Nitter/X 镜像，稳定性取决于目标站点和实例可用性
 - 没有登录系统，`apiKey` 就是匿名客户端身份
 - RSS 用 `feedToken` 暴露，不直接使用 `apiKey`
+
+- 2026-06-15: trigger Vercel rebuild after database migration.
