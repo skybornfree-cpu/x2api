@@ -16,7 +16,7 @@ on:
       tag_limit:
         description: '单次打标签扫描条数'
         required: false
-        default: '500'
+        default: '200'
       apply_cleanup:
         description: '是否执行清理: true / false'
         required: false
@@ -62,15 +62,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r collector/requirements.txt
 
-      - name: Seed system video targets
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          REDIS_URL: ${{ secrets.REDIS_URL }}
-          REDIS_NAMESPACE: x2api
-        run: |
-          python collector/twitter_monitor.py seed-system-targets
-
       - name: Update user feed profiles
+        timeout-minutes: 5
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
@@ -79,17 +72,18 @@ jobs:
         run: |
           python scripts/update_user_feed_profiles.py --lookback-days 90
 
-      - name: Backfill video tags
+      - name: Seed system video targets
+        timeout-minutes: 5
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
           REDIS_NAMESPACE: x2api
-          TAG_LIMIT: ${{ inputs.tag_limit || '500' }}
         run: |
-          python scripts/backfill_video_tags.py --apply --limit "${TAG_LIMIT}"
+          python collector/twitter_monitor.py seed-system-targets
 
       - name: Cleanup video feed data
         if: inputs.apply_cleanup != 'false'
+        timeout-minutes: 10
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
@@ -113,6 +107,7 @@ jobs:
 
       - name: Sync OpenSearch items
         if: vars.OPENSEARCH_SYNC_ENABLED == 'true'
+        timeout-minutes: 15
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENSEARCH_URL: ${{ secrets.OPENSEARCH_URL }}
@@ -121,6 +116,7 @@ jobs:
 
       - name: Sync OpenSearch stats
         if: vars.OPENSEARCH_SYNC_ENABLED == 'true'
+        timeout-minutes: 10
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENSEARCH_URL: ${{ secrets.OPENSEARCH_URL }}
@@ -129,8 +125,20 @@ jobs:
 
       - name: Prune deleted OpenSearch docs
         if: vars.OPENSEARCH_SYNC_ENABLED == 'true'
+        timeout-minutes: 10
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENSEARCH_URL: ${{ secrets.OPENSEARCH_URL }}
         run: |
           python collector/sync_to_opensearch.py --prune-deleted
+
+      - name: Backfill video tags
+        timeout-minutes: 10
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          REDIS_NAMESPACE: x2api
+          TAG_LIMIT: ${{ inputs.tag_limit || '200' }}
+        run: |
+          python scripts/backfill_video_tags.py --apply --limit "${TAG_LIMIT}"
