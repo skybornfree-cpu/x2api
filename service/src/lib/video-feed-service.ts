@@ -9,7 +9,9 @@ import type { TargetSource } from "@/lib/targets";
 import { isOpenSearchFeedEnabled } from "@/lib/opensearch";
 
 export type VideoFeedSource = "user" | "public" | "mixed";
-export type VideoEventType = "impression" | "play" | "finish" | "like" | "dislike" | "skip" | "share";
+export const VIDEO_FEED_EVENT_TYPES = ["impression", "play", "finish", "like", "dislike", "skip", "share"] as const;
+export type VideoEventType = (typeof VIDEO_FEED_EVENT_TYPES)[number];
+export const VIDEO_FEED_SEEN_EVENT_TYPES = VIDEO_FEED_EVENT_TYPES;
 
 export type VideoPlaybackFailureRemovalInput = {
   clientId: string;
@@ -477,16 +479,8 @@ export function parseVideoFeedSource(raw: string | null): VideoFeedSource {
 }
 
 export function parseVideoEventType(value: unknown): VideoEventType {
-  if (
-    value === "impression" ||
-    value === "play" ||
-    value === "finish" ||
-    value === "like" ||
-    value === "dislike" ||
-    value === "skip" ||
-    value === "share"
-  ) {
-    return value;
+  if (typeof value === "string" && (VIDEO_FEED_EVENT_TYPES as readonly string[]).includes(value)) {
+    return value as VideoEventType;
   }
 
   throw new Error("Invalid eventType.");
@@ -635,7 +629,7 @@ async function listVideoFeedFromPostgres(query: VideoFeedQuery) {
           FROM feed_events fe
           INNER JOIN items watched_item ON watched_item.id = fe.item_id
           WHERE fe.client_id = ${query.clientId}
-            AND fe.event_type IN ('impression', 'play', 'finish', 'like', 'share', 'skip', 'dislike')
+            AND fe.event_type = ANY(${VIDEO_FEED_SEEN_EVENT_TYPES}::text[])
             AND fe.created_at >= NOW() - INTERVAL '30 days'
             AND ${watchedVideoKey} = ${itemVideoKey}
         )

@@ -7,7 +7,9 @@ import {
   buildVideoFeedNextCursorPayload,
   compactVideoFeedCursorSeenValues,
   mergeVideoFeedCandidatePools,
+  parseVideoEventType,
   selectDiverseVideoItems,
+  VIDEO_FEED_SEEN_EVENT_TYPES,
 } from "@/lib/video-feed-service";
 
 type FeedCursor = {
@@ -264,6 +266,35 @@ test("buildVideoFeedNextCursorPayload carries keyset boundary and seen identitie
     lastAuthor: "bob",
     lastTarget: "youtube:ucsecond",
   });
+});
+
+test("video feed cursor identities are page-delivery dedupe only", () => {
+  const payload = buildVideoFeedNextCursorPayload({
+    seenIds: [],
+    seenGuids: [],
+    seenVideoKeys: [],
+    items: [
+      {
+        id: "delivered-but-not-viewed",
+        guid: "guid-delivered",
+        videoKey: "twitter:CaseSensitivePath",
+        sortTime: "2026-06-04T11:00:00.000Z",
+        storedAt: "2026-06-04T11:00:00.000Z",
+        target: "twitter:news",
+      },
+    ],
+  });
+
+  assert.deepEqual(payload?.seenIds, ["delivered-but-not-viewed"]);
+  assert.deepEqual(payload?.seenGuids, ["guid-delivered"]);
+  assert.deepEqual(payload?.seenVideoKeys, ["twitter:CaseSensitivePath"]);
+});
+
+test("all accepted video events are eligible for seen filtering", () => {
+  const accepted = VIDEO_FEED_SEEN_EVENT_TYPES.map((eventType) => parseVideoEventType(eventType));
+
+  assert.deepEqual(accepted, ["impression", "play", "finish", "like", "dislike", "skip", "share"]);
+  assert.throws(() => parseVideoEventType("watchMs"), /Invalid eventType/);
 });
 
 test("compactVideoFeedCursorSeenValues keeps the newest unique values", () => {

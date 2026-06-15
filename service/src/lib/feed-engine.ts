@@ -8,6 +8,7 @@ import {
   buildVideoFeedNextCursorPayload,
   compactVideoFeedCursorSeenValues,
   selectDiverseVideoItems,
+  VIDEO_FEED_SEEN_EVENT_TYPES,
   type VideoFeedItem,
   type VideoFeedQuery,
 } from "@/lib/video-feed-service";
@@ -348,7 +349,7 @@ async function getRecentSeenVideoKeys(clientId: string) {
       FROM feed_events fe
       INNER JOIN items watched_item ON watched_item.id = fe.item_id
       WHERE fe.client_id = ${clientId}
-        AND fe.event_type IN ('impression', 'play', 'finish', 'like', 'share', 'skip', 'dislike')
+        AND fe.event_type = ANY(${VIDEO_FEED_SEEN_EVENT_TYPES}::text[])
         AND fe.created_at >= NOW() - INTERVAL '30 days'
       LIMIT 1000
     `);
