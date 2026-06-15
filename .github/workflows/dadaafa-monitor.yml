@@ -2,9 +2,10 @@ name: DadaAFA Video Monitor
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUNBUFFERED: "1"
 
 concurrency:
-  group: x2ding-db-writes
+  group: ${{ github.workflow }}
   cancel-in-progress: false
 
 on:

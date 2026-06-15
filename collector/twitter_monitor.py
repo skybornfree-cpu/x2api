@@ -830,8 +830,18 @@ def wait_for_db_lock(lock_name: str):
 
 
 def lock_name_for_command(func_name: str, args) -> str | None:
+    shard_index = getattr(args, "shard_index", None)
+    shard_count = getattr(args, "shard_count", None)
+
+    def with_shard(base: str) -> str:
+        if shard_index is None and shard_count is None:
+            return base
+        index = shard_index if shard_index is not None else 0
+        count = shard_count if shard_count is not None else 1
+        return f"{base}-shard-{index}-of-{count}"
+
     if func_name == "command_monitor":
-        return "twitter"
+        return with_shard("twitter")
     if func_name in {"command_register_client", "command_seed_system_targets"}:
         return "admin"
     if func_name == "command_cleanup":
@@ -842,7 +852,7 @@ def lock_name_for_command(func_name: str, args) -> str | None:
         return None
     match = re.match(r"^command_(?:monitor|refresh)_(.+?)(?:_playback_urls)?$", func_name)
     if match:
-        return match.group(1)
+        return with_shard(match.group(1))
     return None
 
 

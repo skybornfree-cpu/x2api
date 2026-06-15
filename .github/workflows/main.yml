@@ -2,10 +2,7 @@ name: Twitter Monitor
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-concurrency:
-  group: x2ding-db-writes
-  cancel-in-progress: false
+  PYTHONUNBUFFERED: "1"
 
 on:
   # schedule:
@@ -75,6 +72,9 @@ jobs:
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    concurrency:
+      group: ${{ github.workflow }}-${{ needs.prepare.outputs.shard_count }}-${{ matrix.shard }}
+      cancel-in-progress: false
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.prepare.outputs.shard_matrix) }}
@@ -112,6 +112,7 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           REDIS_NAMESPACE: x2api
           IMGBB_API_KEY: ${{ secrets.IMGBB_API_KEY }}
+          DB_LOCK_MAX_WRITERS: ${{ needs.prepare.outputs.shard_count }}
           RETENTION_DAYS: '30'
           MAX_RECORDS: '100000'
           SHARD_INDEX: ${{ matrix.shard }}

@@ -2,10 +2,7 @@ name: YouTube RSS Monitor
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
-concurrency:
-  group: x2ding-db-writes
-  cancel-in-progress: false
+  PYTHONUNBUFFERED: "1"
 
 on:
   schedule:
@@ -22,9 +19,63 @@ on:
         default: ''
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      shard_matrix: ${{ steps.matrix.outputs.shard_matrix }}
+      shard_count: ${{ steps.matrix.outputs.shard_count }}
+
+    steps:
+      - name: Build shard matrix
+        id: matrix
+        env:
+          INPUT_SHARD_INDEX: ${{ inputs.shard_index || vars.YOUTUBE_MONITOR_SHARD_INDEX || '0' }}
+          INPUT_SHARD_COUNT: ${{ inputs.shard_count || vars.YOUTUBE_MONITOR_SHARD_COUNT || '1' }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          raw_index = (os.environ.get("INPUT_SHARD_INDEX") or "0").strip().lower()
+          raw_count = (os.environ.get("INPUT_SHARD_COUNT") or "1").strip()
+          try:
+              shard_count = int(raw_count)
+          except ValueError:
+              shard_count = 1
+
+          if shard_count <= 0:
+              shard_count = 1
+
+          if raw_index == "all":
+              shards = list(range(shard_count))
+          else:
+              try:
+                  shard_index = int(raw_index)
+              except ValueError as exc:
+                  raise ValueError("shard_index must be an integer or 'all'.") from exc
+
+              if shard_index < 0 or shard_index >= shard_count:
+                  raise ValueError("shard_index must be between 0 and shard_count - 1.")
+
+              shards = [shard_index]
+
+          matrix = {"shard": shards}
+          github_output = os.environ["GITHUB_OUTPUT"]
+          with open(github_output, "a", encoding="utf-8") as fh:
+              fh.write(f"shard_matrix={json.dumps(matrix)}\n")
+              fh.write(f"shard_count={shard_count}\n")
+          PY
+
   monitor-youtube:
+    needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    concurrency:
+      group: ${{ github.workflow }}-${{ needs.prepare.outputs.shard_count }}-${{ matrix.shard }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.shard_matrix) }}
 
     steps:
       - name: Checkout code
@@ -49,8 +100,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
           REDIS_NAMESPACE: x2api
-          SHARD_INDEX: ${{ inputs.shard_index || vars.YOUTUBE_MONITOR_SHARD_INDEX || '0' }}
-          SHARD_COUNT: ${{ inputs.shard_count || vars.YOUTUBE_MONITOR_SHARD_COUNT || '1' }}
+          DB_LOCK_MAX_WRITERS: ${{ needs.prepare.outputs.shard_count }}
+          SHARD_INDEX: ${{ matrix.shard }}
+          SHARD_COUNT: ${{ needs.prepare.outputs.shard_count }}
           RETENTION_DAYS: '30'
           MAX_RECORDS: '100000'
         run: |
