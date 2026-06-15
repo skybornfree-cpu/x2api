@@ -5,6 +5,7 @@ import { decodeCursor, encodeCursor, normalizeLimit } from "@/lib/pagination";
 import { asRows } from "@/lib/sql-result";
 import { resolveAuthorPresentation, type AuthorPresentation } from "@/lib/author-presentation";
 import type { TargetSource } from "@/lib/targets";
+import { isOpenSearchFeedEnabled } from "@/lib/opensearch";
 
 export type VideoFeedSource = "user" | "public" | "mixed";
 export type VideoEventType = "impression" | "play" | "finish" | "like" | "dislike" | "skip" | "share";
@@ -490,7 +491,7 @@ export function parseVideoEventType(value: unknown): VideoEventType {
   throw new Error("Invalid eventType.");
 }
 
-export async function listVideoFeed(query: VideoFeedQuery) {
+async function listVideoFeedFromPostgres(query: VideoFeedQuery) {
   const sql = getSql();
   const limit = normalizeLimit(query.limit, { defaultLimit: 10, maxLimit: 20 });
   const cursor = decodeCursor(query.cursor, isVideoFeedCursor);
@@ -820,6 +821,20 @@ export async function listVideoFeed(query: VideoFeedQuery) {
       hasMore: items.length === limit,
     },
   };
+}
+
+export async function listVideoFeed(query: VideoFeedQuery) {
+  if (!isOpenSearchFeedEnabled()) {
+    return listVideoFeedFromPostgres(query);
+  }
+
+  try {
+    const { listVideoFeedFromOpenSearch } = await import("@/lib/feed-engine");
+    return await listVideoFeedFromOpenSearch(query);
+  } catch (error) {
+    console.warn("[video-feed] OpenSearch feed failed, falling back to PostgreSQL", error);
+    return listVideoFeedFromPostgres(query);
+  }
 }
 
 export async function recordVideoEvent(input: {

@@ -1010,7 +1010,7 @@ Authorization: Bearer x2d_xxx
 `scripts/backfill_video_tags.py` 使用远程词库给历史视频打标签，默认词库为：
 
 ```text
-https://raw.githubusercontent.com/M1Z2105a4/resource/main/ttt_lexicon.json
+https://raw.githubusercontent.com/M1Z2105a4/resource/refs/heads/main/feed_lexicon.json
 ```
 
 试运行：
@@ -1029,13 +1029,12 @@ DATABASE_URL=... python3 scripts/backfill_video_tags.py --apply --limit 100
 
 视频 Feed 清理采用分层保留策略，默认规则：
 
-- `feed_events` 明细事件保留 7 天
+- `feed_events` 明细事件保留 7 天（维护 workflow 默认传入 14 天）
 - 非视频 `items` 保留 14 天
 - 低分视频保留 7 天，默认 `score <= -5`
-- 普通视频保留 30 天
-- 公共池视频保留 60 天
-- 高分视频保留 90 天，默认 `score >= 20`
-- 主内容表超量保护默认保留 100000 条，并优先保留高分视频、公共池视频和普通视频
+- 普通视频保留 30 天（维护 workflow 默认传入 45 天）
+- 公共池视频保留 60 天（维护 workflow 默认传入 75 天）
+- 高分视频保留 90 天（维护 workflow 默认传入 120 天），默认 `score >= 20`
 
 删除 `items` 时，关联的 `item_tags`、`video_stats`、`feed_events` 会通过外键级联清理。
 
@@ -1056,15 +1055,21 @@ DATABASE_URL=... python3 scripts/cleanup_video_feed_data.py --apply
 ```bash
 DATABASE_URL=... python3 scripts/cleanup_video_feed_data.py \
   --apply \
-  --event-days 7 \
+  --event-days 14 \
   --non-video-days 14 \
   --low-score-video-days 7 \
-  --video-days 30 \
-  --public-video-days 60 \
-  --high-score-video-days 90 \
+  --video-days 45 \
+  --public-video-days 75 \
+  --high-score-video-days 120 \
   --low-score-threshold -5 \
   --high-score-threshold 20
 ```
+
+OpenSearch Feed 相关环境变量：
+
+- Vercel：`OPENSEARCH_URL`、`OPENSEARCH_FEED_ENABLED`、可选 `OPENSEARCH_ITEMS_INDEX`
+- GitHub Actions：secret `OPENSEARCH_URL`，repo variable `OPENSEARCH_SYNC_ENABLED=true`
+- 同步命令：`python collector/sync_to_opensearch.py`、`python collector/sync_to_opensearch.py --stats-only`、`python collector/sync_to_opensearch.py --prune-deleted`
 
 ## 13. YouTube Collector 命令
 

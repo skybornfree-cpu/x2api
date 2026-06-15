@@ -25,6 +25,22 @@ on:
         description: '高分视频保留阈值'
         required: false
         default: '20'
+      event_days:
+        description: 'feed_events 明细保留天数'
+        required: false
+        default: '14'
+      video_days:
+        description: '普通视频保留天数'
+        required: false
+        default: '45'
+      public_video_days:
+        description: '公共池视频保留天数'
+        required: false
+        default: '75'
+      high_score_video_days:
+        description: '高分视频保留天数'
+        required: false
+        default: '120'
 
 jobs:
   maintain:
@@ -70,7 +86,39 @@ jobs:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           REDIS_NAMESPACE: x2api
           HIGH_SCORE_THRESHOLD: ${{ inputs.high_score_threshold || '20' }}
+          EVENT_DAYS: ${{ inputs.event_days || vars.VIDEO_FEED_EVENT_DAYS || '14' }}
+          VIDEO_DAYS: ${{ inputs.video_days || vars.VIDEO_FEED_VIDEO_DAYS || '45' }}
+          PUBLIC_VIDEO_DAYS: ${{ inputs.public_video_days || vars.VIDEO_FEED_PUBLIC_VIDEO_DAYS || '75' }}
+          HIGH_SCORE_VIDEO_DAYS: ${{ inputs.high_score_video_days || vars.VIDEO_FEED_HIGH_SCORE_VIDEO_DAYS || '120' }}
         run: |
           python scripts/cleanup_video_feed_data.py \
             --apply \
+            --event-days "${EVENT_DAYS}" \
+            --video-days "${VIDEO_DAYS}" \
+            --public-video-days "${PUBLIC_VIDEO_DAYS}" \
+            --high-score-video-days "${HIGH_SCORE_VIDEO_DAYS}" \
             --high-score-threshold "${HIGH_SCORE_THRESHOLD}"
+
+      - name: Sync OpenSearch items
+        if: vars.OPENSEARCH_SYNC_ENABLED == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENSEARCH_URL: ${{ secrets.OPENSEARCH_URL }}
+        run: |
+          python collector/sync_to_opensearch.py
+
+      - name: Sync OpenSearch stats
+        if: vars.OPENSEARCH_SYNC_ENABLED == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENSEARCH_URL: ${{ secrets.OPENSEARCH_URL }}
+        run: |
+          python collector/sync_to_opensearch.py --stats-only
+
+      - name: Prune deleted OpenSearch docs
+        if: vars.OPENSEARCH_SYNC_ENABLED == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          OPENSEARCH_URL: ${{ secrets.OPENSEARCH_URL }}
+        run: |
+          python collector/sync_to_opensearch.py --prune-deleted
