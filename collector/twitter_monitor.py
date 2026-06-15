@@ -833,12 +833,51 @@ def wait_for_db_lock(lock_name: str):
         time.sleep(poll_seconds)
 
 
+def _optional_int(value: str | None) -> int | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return int(str(value).strip())
+
+
+def apply_env_shard_args(args) -> None:
+    raw_index = getattr(args, "shard_index", None)
+    raw_count = getattr(args, "shard_count", None)
+    if raw_index is None:
+        raw_index = _optional_int(os.environ.get("SHARD_INDEX"))
+    if raw_count is None:
+        raw_count = _optional_int(os.environ.get("SHARD_COUNT"))
+
+    if raw_index is None and raw_count is None:
+        return
+
+    shard_index = raw_index if raw_index is not None else 0
+    shard_count = raw_count if raw_count is not None else 1
+    if shard_count <= 0:
+        raise ValueError("shard-count must be greater than 0.")
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError("shard-index must be between 0 and shard-count - 1.")
+
+    args.shard_index = shard_index
+    args.shard_count = shard_count
+
+
+def source_lock_lanes() -> int:
+    return max(1, int(os.environ.get("SOURCE_LOCK_LANES", "4")))
+
+
+def random_lock_lane() -> int:
+    return secrets.randbelow(source_lock_lanes())
+
+
 def lock_name_for_command(func_name: str, args) -> str | None:
     shard_index = getattr(args, "shard_index", None)
     shard_count = getattr(args, "shard_count", None)
 
-    def lock_name(base: str, action: str | None = None) -> str:
+    def lock_name(base: str, action: str | None = None, *, use_random_lane: bool = False) -> str:
         parts = [part for part in (action, base) if part]
+        if use_random_lane:
+            parts.append(f"lane-{random_lock_lane()}")
+            return "-".join(parts)
         if shard_index is None and shard_count is None:
             return "-".join(parts)
         index = shard_index if shard_index is not None else 0
@@ -858,7 +897,8 @@ def lock_name_for_command(func_name: str, args) -> str | None:
         return None
     match = re.match(r"^command_(monitor|refresh)_(.+?)(?:_playback_urls)?$", func_name)
     if match:
-        return lock_name(match.group(2), match.group(1))
+        source = match.group(2)
+        return lock_name(source, match.group(1), use_random_lane=source not in {"youtube"})
     return None
 
 
@@ -6131,6 +6171,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    apply_env_shard_args(args)
     lock_name = lock_name_for_command(args.func.__name__, args)
     if not lock_name:
         return args.func(args)
