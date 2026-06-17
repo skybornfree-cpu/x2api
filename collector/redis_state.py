@@ -14,7 +14,7 @@ try:
 except ImportError:  # pragma: no cover - optional dependency fallback
     redis = None
 
-DEFAULT_LOCK_TTL_SECONDS = 900
+DEFAULT_LOCK_TTL_SECONDS = 300
 DEFAULT_WAIT_TIMEOUT_SECONDS = 1800
 DEFAULT_POLL_SECONDS = 5
 DEFAULT_MAX_WRITERS = 4
