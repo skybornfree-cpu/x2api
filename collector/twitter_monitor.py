@@ -33,6 +33,11 @@ except ModuleNotFoundError:
     from redis_state import acquire_writer_locks
 
 try:
+    from collector.post_commit_connection import PostCommitOpenSearchConnection
+except ModuleNotFoundError:
+    from post_commit_connection import PostCommitOpenSearchConnection
+
+try:
     from collector.opensearch_items import compact_item as compact_pg_item_after_sync
     from collector.opensearch_items import fetch_document as fetch_opensearch_document
     from collector.opensearch_items import index_item_document as index_item_document_to_opensearch
@@ -764,7 +769,8 @@ def require_database_url() -> str:
 def get_db_connection():
     # Supabase transaction pooler is the safest fit for short-lived jobs such
     # as GitHub Actions, but it doesn't support prepared statements.
-    return connect(require_database_url(), row_factory=dict_row, prepare_threshold=None)
+    conn = connect(require_database_url(), row_factory=dict_row, prepare_threshold=None)
+    return PostCommitOpenSearchConnection(conn)
 
 
 LOCK_KEYS = {
@@ -4214,7 +4220,7 @@ def cleanup_records(conn, retention_days: int, max_records: int) -> dict[str, in
 
     for item_id in dict.fromkeys(deleted_item_ids):
         try:
-            delete_opensearch_item(item_id)
+            delete_opensearch_item(item_id, conn=conn)
         except Exception as exc:
             print(f"[opensearch] cleanup delete failed for {item_id}: {exc}")
 

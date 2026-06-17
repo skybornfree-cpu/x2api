@@ -222,7 +222,16 @@ def load_target_context(conn: psycopg.Connection, target_id: str) -> dict | None
     return row
 
 
-def index_item_document(
+def _defer_or_run(conn, callback) -> bool:
+    defer = getattr(conn, "defer_opensearch_operation", None)
+    if callable(defer):
+        defer(callback)
+        return True
+    callback(conn)
+    return True
+
+
+def _index_item_document_now(
     conn: psycopg.Connection,
     *,
     item_id: str,
@@ -336,12 +345,86 @@ def index_item_document(
         "images": [image for image in (images or []) if isinstance(image, str) and image],
     }
 
-    try:
-        client.index(index=get_items_index(), id=str(item_id), body=doc, refresh=False)
-        return True
-    except Exception as exc:
-        print(f"[opensearch] direct index failed for {item_id}: {exc}", file=sys.stderr)
-        return False
+    client.index(index=get_items_index(), id=str(item_id), body=doc, refresh=False)
+    return True
+
+
+def index_item_document(
+    conn: psycopg.Connection,
+    *,
+    item_id: str,
+    target_id: str,
+    guid: str,
+    item_role: str = "entry",
+    parent_item_id: str | None = None,
+    group_key: str | None = None,
+    variant_key: str | None = None,
+    variant_index: int | None = None,
+    video_key: str | None = None,
+    video_count: int | None = None,
+    video_url: str | None,
+    playback_headers: dict | None,
+    cover_url: str | None,
+    title: str | None,
+    caption: str | None,
+    content: str | None,
+    author: str | None,
+    fullname: str | None,
+    display_author: str | None,
+    display_handle: str | None,
+    author_profile_url: str | None,
+    author_profile_platform: str | None,
+    x_url: str | None,
+    link: str | None,
+    images: list[str] | None,
+    published_at,
+    stored_at,
+    updated_at,
+    expires_at,
+    video_url_expires_at,
+    is_retweet: bool,
+) -> bool:
+    def callback(active_conn):
+        try:
+            _index_item_document_now(
+                active_conn,
+                item_id=item_id,
+                target_id=target_id,
+                guid=guid,
+                item_role=item_role,
+                parent_item_id=parent_item_id,
+                group_key=group_key,
+                variant_key=variant_key,
+                variant_index=variant_index,
+                video_key=video_key,
+                video_count=video_count,
+                video_url=video_url,
+                playback_headers=playback_headers,
+                cover_url=cover_url,
+                title=title,
+                caption=caption,
+                content=content,
+                author=author,
+                fullname=fullname,
+                display_author=display_author,
+                display_handle=display_handle,
+                author_profile_url=author_profile_url,
+                author_profile_platform=author_profile_platform,
+                x_url=x_url,
+                link=link,
+                images=images,
+                published_at=published_at,
+                stored_at=stored_at,
+                updated_at=updated_at,
+                expires_at=expires_at,
+                video_url_expires_at=video_url_expires_at,
+                is_retweet=is_retweet,
+            )
+        except Exception as exc:
+            print(f"[opensearch] direct index failed for {item_id}: {exc}", file=sys.stderr)
+            raise
+
+    return _defer_or_run(conn, callback)
 
 
 def update_item_playback(
@@ -352,37 +435,50 @@ def update_item_playback(
     video_key: str | None = None,
     playback_headers: dict | None = None,
     cover_url: str | None = None,
+    conn: psycopg.Connection | None = None,
 ) -> bool:
-    if not is_opensearch_write_enabled():
-        return False
+    if conn is None:
+        if not is_opensearch_write_enabled():
+            return False
+        client = get_client()
+        if client is None:
+            return False
 
-    client = get_client()
-    if client is None:
-        return False
+    def callback(_active_conn):
+        if not is_opensearch_write_enabled():
+            return
 
-    payload = {
-        "video_url": video_url,
-        "video_key": video_key or video_url,
-        "video_url_expires_at": _to_iso(video_url_expires_at),
-        "has_video": bool(video_url),
-    }
-    if playback_headers is not None:
-        payload["playback_headers"] = playback_headers
-    if cover_url is not None:
-        payload["cover_url"] = cover_url
+        client = get_client()
+        if client is None:
+            return
 
-    try:
-        client.update(
-            index=get_items_index(),
-            id=str(item_id),
-            body={"doc": payload},
-            refresh=False,
-            retry_on_conflict=3,
-        )
+        payload = {
+            "video_url": video_url,
+            "video_key": video_key or video_url,
+            "video_url_expires_at": _to_iso(video_url_expires_at),
+            "has_video": bool(video_url),
+        }
+        if playback_headers is not None:
+            payload["playback_headers"] = playback_headers
+        if cover_url is not None:
+            payload["cover_url"] = cover_url
+
+        try:
+            client.update(
+                index=get_items_index(),
+                id=str(item_id),
+                body={"doc": payload},
+                refresh=False,
+                retry_on_conflict=3,
+            )
+        except Exception as exc:
+            print(f"[opensearch] playback update failed for {item_id}: {exc}", file=sys.stderr)
+            raise
+
+    if conn is None:
+        callback(None)
         return True
-    except Exception as exc:
-        print(f"[opensearch] playback update failed for {item_id}: {exc}", file=sys.stderr)
-        return False
+    return _defer_or_run(conn, callback)
 
 
 def update_item_document(
@@ -408,14 +504,8 @@ def update_item_document(
     updated_at=_UNSET,
     expires_at=_UNSET,
     video_url_expires_at=_UNSET,
+    conn: psycopg.Connection | None = None,
 ) -> bool:
-    if not is_opensearch_write_enabled():
-        return False
-
-    client = get_client()
-    if client is None:
-        return False
-
     payload: dict[str, object] = {}
     field_map = {
         "title": title,
@@ -449,18 +539,37 @@ def update_item_document(
     if not payload:
         return True
 
-    try:
-        client.update(
-            index=get_items_index(),
-            id=str(item_id),
-            body={"doc": payload},
-            refresh=False,
-            retry_on_conflict=3,
-        )
+    if conn is None:
+        if not is_opensearch_write_enabled():
+            return False
+        client = get_client()
+        if client is None:
+            return False
+
+    def callback(_active_conn):
+        if not is_opensearch_write_enabled():
+            return
+
+        client = get_client()
+        if client is None:
+            return
+
+        try:
+            client.update(
+                index=get_items_index(),
+                id=str(item_id),
+                body={"doc": payload},
+                refresh=False,
+                retry_on_conflict=3,
+            )
+        except Exception as exc:
+            print(f"[opensearch] document update failed for {item_id}: {exc}", file=sys.stderr)
+            raise
+
+    if conn is None:
+        callback(None)
         return True
-    except Exception as exc:
-        print(f"[opensearch] document update failed for {item_id}: {exc}", file=sys.stderr)
-        return False
+    return _defer_or_run(conn, callback)
 
 
 def upsert_item_record(
@@ -687,23 +796,36 @@ def refresh_item_playback(
         video_key=video_key,
         playback_headers=playback_headers,
         cover_url=cover_url,
+        conn=conn,
     )
 
 
-def delete_item(item_id: str) -> bool:
-    if not is_opensearch_write_enabled():
-        return False
+def delete_item(item_id: str, conn: psycopg.Connection | None = None) -> bool:
+    if conn is None:
+        if not is_opensearch_write_enabled():
+            return False
+        client = get_client()
+        if client is None:
+            return False
 
-    client = get_client()
-    if client is None:
-        return False
+    def callback(_active_conn):
+        if not is_opensearch_write_enabled():
+            return
 
-    try:
-        client.delete(index=get_items_index(), id=str(item_id), ignore=[404], refresh=False)
+        client = get_client()
+        if client is None:
+            return
+
+        try:
+            client.delete(index=get_items_index(), id=str(item_id), ignore=[404], refresh=False)
+        except Exception as exc:
+            print(f"[opensearch] delete failed for {item_id}: {exc}", file=sys.stderr)
+            raise
+
+    if conn is None:
+        callback(None)
         return True
-    except Exception as exc:
-        print(f"[opensearch] delete failed for {item_id}: {exc}", file=sys.stderr)
-        return False
+    return _defer_or_run(conn, callback)
 
 
 def delete_items(item_ids: Iterable[str]) -> int:

@@ -1,5 +1,6 @@
 import { resolveAuthorPresentation, type AuthorPresentation } from "@/lib/author-presentation";
 import { getSql } from "@/lib/db";
+import { filterExistingItemIds } from "@/lib/item-visibility";
 import { getOpenSearchClient, getOpenSearchItemsIndex } from "@/lib/opensearch";
 import { buildCursorPage, decodeCursor, normalizeLimit } from "@/lib/pagination";
 import { cachedJson } from "@/lib/redis-cache";
@@ -277,8 +278,9 @@ function toRow(source: OpenSearchItemSource, sensitiveCategories: Set<string>): 
 
 async function rowsFromResponse(response: OpenSearchSearchResponse) {
   const sensitiveCategories = await getSensitiveCategorySet();
-  const rows = getHits(response).map((hit) => (hit._source ? toRow(hit._source, sensitiveCategories) : null));
-  return rows.filter((row): row is OpenSearchRow => row !== null);
+  const rows = getHits(response).map((hit) => (hit._source ? toRow(hit._source, sensitiveCategories) : null)).filter((row): row is OpenSearchRow => row !== null);
+  const visibleIds = await filterExistingItemIds(rows.map((row) => row.id));
+  return rows.filter((row) => visibleIds.has(row.id));
 }
 
 function sourceScopeFilter(sourceScope: ItemQuery["sourceScope"], targetIds: string[]) {

@@ -1,4 +1,5 @@
 import { getSql, type QueryChunk } from "@/lib/db";
+import { filterExistingItemIds } from "@/lib/item-visibility";
 import { getOpenSearchClient, getOpenSearchItemsIndex } from "@/lib/opensearch";
 import { decodeCursor, encodeCursor, normalizeLimit } from "@/lib/pagination";
 import { cachedJson } from "@/lib/redis-cache";
@@ -907,10 +908,12 @@ function getHits(response: OpenSearchSearchResponse) {
   return response.body?.hits?.hits ?? response.hits?.hits ?? [];
 }
 
-function rowsFromResponse(response: OpenSearchSearchResponse) {
-  return getHits(response)
+async function rowsFromResponse(response: OpenSearchSearchResponse) {
+  const rows = getHits(response)
     .map((hit) => (hit._source ? toRow(hit._source) : null))
     .filter((row): row is OpenSearchFeedRow => row !== null);
+  const visibleIds = await filterExistingItemIds(rows.map((row) => row.id));
+  return rows.filter((row) => visibleIds.has(row.id));
 }
 
 function uniqueCandidates(candidates: OpenSearchFeedRow[]) {
@@ -1057,8 +1060,8 @@ export async function listVideoFeedFromOpenSearch(query: VideoFeedQuery) {
   ])) as unknown as [OpenSearchSearchResponse, OpenSearchSearchResponse];
 
   const items = selectFeedItems({
-    personalizedCandidates: rowsFromResponse(personalizedResponse),
-    exploreCandidates: rowsFromResponse(exploreResponse),
+    personalizedCandidates: await rowsFromResponse(personalizedResponse),
+    exploreCandidates: await rowsFromResponse(exploreResponse),
     profile,
     limit,
     previousLastAuthor: cursor?.lastAuthor,
