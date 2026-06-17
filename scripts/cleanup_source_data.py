@@ -70,6 +70,21 @@ def cleanup_source(conn: psycopg.Connection, source: str) -> dict[str, int]:
 
         cur.execute(
             """
+            WITH doomed_items AS (
+                SELECT i.id
+                FROM items i
+                INNER JOIN targets t ON t.id = i.target_id
+                WHERE t.source = %s
+            )
+            DELETE FROM item_tags it
+            WHERE it.item_id IN (SELECT id FROM doomed_items)
+            """,
+            (source,),
+        )
+        item_tags_deleted = cur.rowcount
+
+        cur.execute(
+            """
             DELETE FROM items i
             USING targets t
             WHERE t.id = i.target_id
@@ -101,42 +116,15 @@ def cleanup_source(conn: psycopg.Connection, source: str) -> dict[str, int]:
         )
         resolution_queue_deleted = cur.rowcount
 
-        cur.execute(
-            """
-            DELETE FROM subscriptions s
-            USING targets t
-            WHERE t.id = s.target_id
-              AND t.source = %s
-            """,
-            (source,),
-        )
-        subscriptions_deleted = cur.rowcount
-
-        cur.execute(
-            """
-            DELETE FROM target_profiles tp
-            USING targets t
-            WHERE t.id = tp.target_id
-              AND t.source = %s
-            """,
-            (source,),
-        )
-        target_profiles_deleted = cur.rowcount
-
-        cur.execute("DELETE FROM targets WHERE source = %s", (source,))
-        targets_deleted = cur.rowcount
-
     opensearch_deleted = delete_items(deleted_item_ids)
     opensearch_deleted = max(opensearch_deleted, delete_items_by_source(source))
     return {
         "feed_events_deleted": feed_events_deleted,
         "video_stats_deleted": video_stats_deleted,
+        "item_tags_deleted": item_tags_deleted,
         "items_deleted": items_deleted,
         "crawl_state_deleted": crawl_state_deleted,
         "resolution_queue_deleted": resolution_queue_deleted,
-        "subscriptions_deleted": subscriptions_deleted,
-        "target_profiles_deleted": target_profiles_deleted,
-        "targets_deleted": targets_deleted,
         "opensearch_deleted": opensearch_deleted,
     }
 

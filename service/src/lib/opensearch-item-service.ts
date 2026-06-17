@@ -477,7 +477,7 @@ export async function listItemsFromOpenSearch(query: ItemQuery): Promise<OpenSea
     tagFilters: normalizedTags,
     categoryFilters,
     sinceFilter: query.since ? new Date(query.since).toISOString() : null,
-    sourceScope: query.sourceScope ?? "user",
+    sourceScope: query.sourceScope ?? "all",
   });
   return toResult(rows, limit);
 }
