@@ -166,6 +166,20 @@ type VideoKeyRow = {
   videoKey: string | null;
 };
 
+type RecentSeenIdentityRow = {
+  id: string;
+  guid: string | null;
+  stableVideoKey: string | null;
+  variantKey: string | null;
+  videoUrl: string | null;
+};
+
+type RecentSeenIdentities = {
+  ids: string[];
+  guids: string[];
+  videoKeys: string[];
+};
+
 const VIDEO_SOURCE_VALUES = [
   "youtube",
   "heiliao",
@@ -334,6 +348,10 @@ function combineSeenVideoKeys(recentSeenVideoKeys: string[], cursorSeenVideoKeys
   return uniquePreservingValues([...recentSeenVideoKeys, ...cursorSeenVideoKeys], max);
 }
 
+function combineSeenValues(recentSeenValues: string[], cursorSeenValues: string[], max = 1000) {
+  return uniquePreservingValues([...recentSeenValues, ...cursorSeenValues], max);
+}
+
 async function getSubscribedTargetIds(clientId: string) {
   return cachedJson("os-feed-subscriptions", [clientId], 120, async () => {
     const sql = getSql();
@@ -346,12 +364,28 @@ async function getSubscribedTargetIds(clientId: string) {
   });
 }
 
-async function getRecentSeenVideoKeys(clientId: string) {
-  return cachedJson("os-feed-seen-video-keys-v2", [clientId], 45, async () => {
+function normalizeRecentSeenIdentities(rows: RecentSeenIdentityRow[]): RecentSeenIdentities {
+  return {
+    ids: uniquePreservingValues(rows.map((row) => row.id), 1000),
+    guids: uniquePreservingValues(rows.map((row) => row.guid), 1000),
+    videoKeys: uniquePreservingValues(
+      rows.flatMap((row) => [row.stableVideoKey, row.variantKey, row.videoUrl]),
+      1000,
+    ),
+  };
+}
+
+async function getRecentSeenIdentities(clientId: string) {
+  return cachedJson("os-feed-seen-identities-v1", [clientId], 45, async () => {
     const sql = getSql();
     const watchedVideoKey = videoKeyExpression("watched_item");
-    const rows = asRows<VideoKeyRow>(await sql`
-      SELECT DISTINCT ${watchedVideoKey} AS "videoKey"
+    const rows = asRows<RecentSeenIdentityRow>(await sql`
+      SELECT DISTINCT
+        watched_item.id::text AS id,
+        watched_item.guid AS guid,
+        ${watchedVideoKey} AS "stableVideoKey",
+        watched_item.variant_key AS "variantKey",
+        watched_item.video_url AS "videoUrl"
       FROM feed_events fe
       INNER JOIN items watched_item ON watched_item.id = fe.item_id
       WHERE fe.client_id = ${clientId}
@@ -359,7 +393,7 @@ async function getRecentSeenVideoKeys(clientId: string) {
         AND fe.created_at >= NOW() - INTERVAL '30 days'
       LIMIT 1000
     `);
-    return uniquePreservingValues(rows.map((row) => row.videoKey), 1000);
+    return normalizeRecentSeenIdentities(rows);
   });
 }
 
@@ -1010,17 +1044,19 @@ export async function listVideoFeedFromOpenSearch(query: VideoFeedQuery) {
   const normalizedCategories = normalizedUnique([...(query.categories ?? []), query.category]);
   const keyword = normalizeVideoFeedKeyword(query.keyword);
   const source = query.source ?? "mixed";
-  const seenIds = compactVideoFeedCursorSeenValues(cursor?.seenIds ?? []);
-  const seenGuids = compactVideoFeedCursorSeenValues(cursor?.seenGuids ?? []);
+  const cursorSeenIds = compactVideoFeedCursorSeenValues(cursor?.seenIds ?? []);
+  const cursorSeenGuids = compactVideoFeedCursorSeenValues(cursor?.seenGuids ?? []);
   const cursorSeenVideoKeys = compactVideoFeedCursorSeenValues(cursor?.seenVideoKeys ?? []);
 
-  const [subscribedTargetIds, recentSeenVideoKeys, profile, categoryFilters] = await Promise.all([
+  const [subscribedTargetIds, recentSeenIdentities, profile, categoryFilters] = await Promise.all([
     getSubscribedTargetIds(query.clientId),
-    getRecentSeenVideoKeys(query.clientId),
+    getRecentSeenIdentities(query.clientId),
     getUserFeedProfile(query.clientId),
     normalizeCategoryFilters(normalizedCategories),
   ]);
-  const seenVideoKeys = combineSeenVideoKeys(recentSeenVideoKeys, cursorSeenVideoKeys);
+  const seenIds = combineSeenValues(recentSeenIdentities.ids, cursorSeenIds);
+  const seenGuids = combineSeenValues(recentSeenIdentities.guids, cursorSeenGuids);
+  const seenVideoKeys = combineSeenVideoKeys(recentSeenIdentities.videoKeys, cursorSeenVideoKeys);
 
   const personalizedSize = Math.max(limit * 8, 80);
   const exploreSize = Math.max(Math.ceil(limit * Math.max(profile.exploreRatio, 0.2) * 8), 24);
@@ -1087,3 +1123,7 @@ export async function listVideoFeedFromOpenSearch(query: VideoFeedQuery) {
     },
   };
 }
+
+export const __testables = {
+  normalizeRecentSeenIdentities,
+};

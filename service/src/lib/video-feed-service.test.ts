@@ -13,6 +13,7 @@ import {
   VIDEO_FEED_SEEN_EVENT_TYPES,
   __testables,
 } from "@/lib/video-feed-service";
+import { __testables as feedEngineTestables } from "@/lib/feed-engine";
 
 type FeedCursor = {
   sortTime: string;
@@ -356,4 +357,30 @@ test("getOpenSearchVideoDocumentLike reads _source from nested body responses", 
     item_role: "video_variant",
     video_url: "https://cdn.example.com/video.m3u8",
   });
+});
+
+test("normalizeRecentSeenIdentities keeps guid and runtime playback keys for feed exclusion", () => {
+  const identities = feedEngineTestables.normalizeRecentSeenIdentities([
+    {
+      id: "item-1",
+      guid: "missav:262787",
+      stableVideoKey: "missav:262787",
+      variantKey: "https://2606.senlin2026.com/20260615/0BrFgTJW/index.m3u8",
+      videoUrl: "https://2606.senlin2026.com/20260615/0BrFgTJW/index.m3u8",
+    },
+    {
+      id: "item-1",
+      guid: " missav:262787 ",
+      stableVideoKey: "missav:262787",
+      variantKey: "https://2606.senlin2026.com/20260615/0BrFgTJW/index.m3u8",
+      videoUrl: "https://2606.senlin2026.com/20260615/0BrFgTJW/index.m3u8",
+    },
+  ]);
+
+  assert.deepEqual(identities.ids, ["item-1"]);
+  assert.deepEqual(identities.guids, ["missav:262787"]);
+  assert.deepEqual(identities.videoKeys, [
+    "missav:262787",
+    "https://2606.senlin2026.com/20260615/0BrFgTJW/index.m3u8",
+  ]);
 });
