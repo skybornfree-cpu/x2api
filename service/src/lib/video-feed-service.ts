@@ -501,6 +501,10 @@ function isActiveVideoDocument(source: Record<string, unknown> | null) {
     return false;
   }
 
+  if ((typeof source.item_role === "string" ? source.item_role : "entry") !== "video_variant") {
+    return false;
+  }
+
   const hasVideo = Boolean(source.has_video) || (typeof source.video_url === "string" && source.video_url.length > 0);
   if (!hasVideo) {
     return false;

@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS targets (
     normalized_value TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT targets_source_check CHECK (source IN ('twitter', 'youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', '91rb', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'affair', 'attach', 'dirtyship', 'influencersgonewild', 'missav')),
+    CONSTRAINT targets_source_check CHECK (source IN ('twitter', 'youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', '91rb', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'affair', 'attach', 'caoliu', 'dirtyship', 'influencersgonewild', 'missav')),
     CONSTRAINT targets_kind_check CHECK (kind IN ('user', 'keyword', 'channel', 'site')),
     CONSTRAINT targets_youtube_kind_check CHECK (source <> 'youtube' OR kind = 'channel'),
     CONSTRAINT targets_heiliao_kind_check CHECK (source <> 'heiliao' OR kind = 'site'),
@@ -75,7 +75,7 @@ ALTER TABLE targets DROP CONSTRAINT IF EXISTS targets_attach_kind_check;
 ALTER TABLE targets DROP CONSTRAINT IF EXISTS targets_dirtyship_kind_check;
 ALTER TABLE targets DROP CONSTRAINT IF EXISTS targets_influencersgonewild_kind_check;
 ALTER TABLE targets DROP CONSTRAINT IF EXISTS targets_missav_kind_check;
-ALTER TABLE targets ADD CONSTRAINT targets_source_check CHECK (source IN ('twitter', 'youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', '91rb', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'affair', 'attach', 'dirtyship', 'influencersgonewild', 'missav'));
+ALTER TABLE targets ADD CONSTRAINT targets_source_check CHECK (source IN ('twitter', 'youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '18j', '1mtif', 'tikporn', '91porna', '91porn', '91rb', 'badnews', 'bdrq', 'avgood', '705hs', 'xxxtik', 'affair', 'attach', 'caoliu', 'dirtyship', 'influencersgonewild', 'missav'));
 ALTER TABLE targets ADD CONSTRAINT targets_kind_check CHECK (kind IN ('user', 'keyword', 'channel', 'site'));
 ALTER TABLE targets ADD CONSTRAINT targets_youtube_kind_check CHECK (source <> 'youtube' OR kind = 'channel');
 ALTER TABLE targets ADD CONSTRAINT targets_heiliao_kind_check CHECK (source <> 'heiliao' OR kind = 'site');
@@ -123,6 +123,11 @@ CREATE TABLE IF NOT EXISTS items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     target_id UUID NOT NULL REFERENCES targets(id) ON DELETE CASCADE,
     guid TEXT NOT NULL,
+    item_role TEXT NOT NULL DEFAULT 'entry',
+    parent_item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+    group_key TEXT,
+    variant_key TEXT,
+    variant_index INTEGER,
     video_url TEXT,
     expires_at TIMESTAMPTZ NOT NULL DEFAULT '2099-12-31 23:59:59+00',
     video_url_expires_at TIMESTAMPTZ NOT NULL DEFAULT '2099-12-31 23:59:59+00',
@@ -131,15 +136,29 @@ CREATE TABLE IF NOT EXISTS items (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     is_retweet BOOLEAN NOT NULL DEFAULT FALSE,
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
-    UNIQUE (target_id, guid)
+    UNIQUE (target_id, guid),
+    CONSTRAINT items_role_check CHECK (item_role IN ('entry', 'video_variant'))
 );
 
+ALTER TABLE items ADD COLUMN IF NOT EXISTS item_role TEXT NOT NULL DEFAULT 'entry';
+ALTER TABLE items ADD COLUMN IF NOT EXISTS parent_item_id UUID REFERENCES items(id) ON DELETE CASCADE;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS group_key TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS variant_key TEXT;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS variant_index INTEGER;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL DEFAULT '2099-12-31 23:59:59+00';
 ALTER TABLE items ADD COLUMN IF NOT EXISTS video_url_expires_at TIMESTAMPTZ NOT NULL DEFAULT '2099-12-31 23:59:59+00';
 ALTER TABLE items ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
 UPDATE items
 SET updated_at = COALESCE(updated_at, stored_at, NOW())
 WHERE updated_at IS NULL;
+UPDATE items
+SET item_role = CASE
+    WHEN COALESCE(video_url, '') <> '' THEN 'video_variant'
+    ELSE 'entry'
+END
+WHERE item_role IS NULL OR item_role NOT IN ('entry', 'video_variant');
+ALTER TABLE items DROP CONSTRAINT IF EXISTS items_role_check;
+ALTER TABLE items ADD CONSTRAINT items_role_check CHECK (item_role IN ('entry', 'video_variant'));
 ALTER TABLE items ALTER COLUMN updated_at SET DEFAULT NOW();
 ALTER TABLE items ALTER COLUMN updated_at SET NOT NULL;
 ALTER TABLE items DROP COLUMN IF EXISTS author;
@@ -325,6 +344,9 @@ BEGIN
         WHEN 'attach.bslqmdvk.cc' THEN RETURN 'attach';
         WHEN 'hlcgw' THEN RETURN 'attach';
         WHEN 'hlcgw.com' THEN RETURN 'attach';
+        WHEN 'caoliu' THEN RETURN 'caoliu';
+        WHEN 't66y' THEN RETURN 'caoliu';
+        WHEN 't66y.com' THEN RETURN 'caoliu';
         WHEN 'dirtyship' THEN RETURN 'dirtyship';
         WHEN 'dirtyship.com' THEN RETURN 'dirtyship';
         WHEN 'influencersgonewild' THEN RETURN 'influencersgonewild';
@@ -365,6 +387,7 @@ BEGIN
         WHEN 'xxxtik' THEN RETURN 'xxxtik';
         WHEN 'affair' THEN RETURN '911爆料';
         WHEN 'attach' THEN RETURN '黑料吃瓜网';
+        WHEN 'caoliu' THEN RETURN '草榴社区';
         WHEN 'dirtyship' THEN RETURN 'DirtyShip';
         WHEN 'influencersgonewild' THEN RETURN 'InfluencersGoneWild';
         WHEN 'missav' THEN RETURN 'MISSAV';
@@ -384,13 +407,19 @@ CREATE INDEX IF NOT EXISTS idx_items_target_id_stored_at ON items (target_id, st
 CREATE INDEX IF NOT EXISTS idx_items_stored_at ON items (stored_at DESC);
 CREATE INDEX IF NOT EXISTS idx_items_updated_at_id ON items (updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_items_published_at ON items (published_at DESC);
-CREATE INDEX IF NOT EXISTS idx_items_video_feed ON items (stored_at DESC) WHERE video_url IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_items_role_stored_at ON items (item_role, stored_at DESC);
+CREATE INDEX IF NOT EXISTS idx_items_parent_item_id ON items (parent_item_id);
+CREATE INDEX IF NOT EXISTS idx_items_group_key ON items (group_key);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_items_parent_variant_key
+    ON items (parent_item_id, variant_key)
+    WHERE item_role = 'video_variant' AND variant_key IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_items_video_feed ON items (stored_at DESC) WHERE item_role = 'video_variant' AND video_url IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_items_video_feed_sort_time
     ON items ((COALESCE(published_at, stored_at)) DESC, stored_at DESC, id DESC)
-    WHERE video_url IS NOT NULL AND video_url <> '';
+    WHERE item_role = 'video_variant' AND video_url IS NOT NULL AND video_url <> '';
 CREATE INDEX IF NOT EXISTS idx_items_target_video_feed_sort_time
     ON items (target_id, (COALESCE(published_at, stored_at)) DESC, stored_at DESC, id DESC)
-    WHERE video_url IS NOT NULL AND video_url <> '';
+    WHERE item_role = 'video_variant' AND video_url IS NOT NULL AND video_url <> '';
 CREATE INDEX IF NOT EXISTS idx_items_expires_at ON items (expires_at);
 CREATE INDEX IF NOT EXISTS idx_items_video_url_expires_at ON items (video_url_expires_at);
 

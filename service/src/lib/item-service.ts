@@ -14,6 +14,7 @@ type ItemQuery = {
   tags?: string[] | null;
   categories?: string[] | null;
   since?: string | null;
+  sourceScope?: "user" | "public" | "all" | null;
 };
 
 export type { ItemRecord, ListItemsResult };

@@ -15,6 +15,7 @@ type ItemQuery = {
   tags?: string[] | null;
   categories?: string[] | null;
   since?: string | null;
+  sourceScope?: "user" | "public" | "all" | null;
 };
 
 type FeedTokenQuery = {
@@ -97,6 +98,8 @@ type OpenSearchItemSource = {
   tags?: unknown;
   is_retweet?: boolean | null;
   is_sensitive?: boolean | null;
+  item_role?: string | null;
+  is_public_pool?: boolean | null;
 };
 
 type OpenSearchHit = {
@@ -118,33 +121,6 @@ type OpenSearchSearchResponse = {
 type OpenSearchRow = ItemRecordBase & {
   sortTime: string;
 } & Partial<AuthorPresentation>;
-
-const VIDEO_SOURCE_VALUES = [
-  "youtube",
-  "heiliao",
-  "cg91",
-  "baoliao51",
-  "douyin",
-  "18mh",
-  "rou",
-  "dadaafa",
-  "18j",
-  "1mtif",
-  "tikporn",
-  "91porna",
-  "91porn",
-  "91rb",
-  "badnews",
-  "bdrq",
-  "avgood",
-  "705hs",
-  "xxxtik",
-  "affair",
-  "attach",
-  "dirtyship",
-  "influencersgonewild",
-  "missav",
-];
 
 function normalizeKey(value: string | null | undefined) {
   return value?.trim().toLowerCase() || null;
@@ -260,6 +236,9 @@ function toRow(source: OpenSearchItemSource, sensitiveCategories: Set<string>): 
   if (!source.id || !source.target || !source.source || !source.kind || !source.stored_at || !source.expires_at || !source.video_url_expires_at) {
     return null;
   }
+  if ((source.item_role ?? "entry") !== "entry") {
+    return null;
+  }
   const tags = toStringArray(source.tags);
   const category = source.category?.trim().toLowerCase() || null;
   const isSensitive = Boolean(source.is_sensitive) || (category ? sensitiveCategories.has(category) : false);
@@ -302,16 +281,26 @@ async function rowsFromResponse(response: OpenSearchSearchResponse) {
   return rows.filter((row): row is OpenSearchRow => row !== null);
 }
 
-function sourceVisibilityClause() {
-  return {
-    bool: {
-      should: [
-        { bool: { must_not: [{ terms: { source: VIDEO_SOURCE_VALUES } }] } },
-        { range: { video_url_expires_at: { gt: "now+10m" } } },
-      ],
-      minimum_should_match: 1,
-    },
-  };
+function sourceScopeFilter(sourceScope: ItemQuery["sourceScope"], targetIds: string[]) {
+  const scope = sourceScope ?? "user";
+  if (scope === "public") {
+    return { term: { is_public_pool: true } };
+  }
+  if (scope === "all") {
+    if (targetIds.length === 0) {
+      return { term: { is_public_pool: true } };
+    }
+    return {
+      bool: {
+        should: [{ terms: { target_id: targetIds } }, { term: { is_public_pool: true } }],
+        minimum_should_match: 1,
+      },
+    };
+  }
+  if (targetIds.length === 0) {
+    return { term: { target_id: "__no_subscriptions__" } };
+  }
+  return { terms: { target_id: targetIds } };
 }
 
 function buildItemsQuery(input: {
@@ -323,17 +312,13 @@ function buildItemsQuery(input: {
   categoryFilters: string[];
   sinceFilter: string | null;
   cursor: ItemCursor | null;
+  sourceScope: ItemQuery["sourceScope"];
 }) {
   const filter: unknown[] = [
     { range: { expires_at: { gt: "now" } } },
-    sourceVisibilityClause(),
+    { term: { item_role: "entry" } },
+    sourceScopeFilter(input.sourceScope, input.targetIds),
   ];
-
-  if (input.targetIds.length === 0) {
-    filter.push({ term: { target_id: "__no_subscriptions__" } });
-  } else {
-    filter.push({ terms: { target_id: input.targetIds } });
-  }
 
   if (input.sinceFilter) {
     filter.push({ range: { stored_at: { gte: input.sinceFilter } } });
@@ -439,6 +424,7 @@ async function queryItemsFromOpenSearch(input: {
   tagFilters: string[];
   categoryFilters: string[];
   sinceFilter: string | null;
+  sourceScope: ItemQuery["sourceScope"];
 }) {
   const client = getOpenSearchClient();
   if (!client) {
@@ -491,6 +477,7 @@ export async function listItemsFromOpenSearch(query: ItemQuery): Promise<OpenSea
     tagFilters: normalizedTags,
     categoryFilters,
     sinceFilter: query.since ? new Date(query.since).toISOString() : null,
+    sourceScope: query.sourceScope ?? "user",
   });
   return toResult(rows, limit);
 }
@@ -511,6 +498,7 @@ export async function listItemsByFeedTokenFromOpenSearch(query: FeedTokenQuery) 
     tagFilters: [],
     categoryFilters: [],
     sinceFilter: null,
+    sourceScope: "all",
   });
   return rows.slice(0, limit).map(({ sortTime: _sortTime, ...item }) => ({
     ...item,

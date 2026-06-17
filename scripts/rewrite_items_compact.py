@@ -165,19 +165,19 @@ def recreate_indexes(conn, plan: RewritePlan) -> None:
         cur.execute(f'CREATE INDEX "{plan.temp_table}_stored_at_idx" ON public."{plan.temp_table}" (stored_at DESC)')
         cur.execute(f'CREATE INDEX "{plan.temp_table}_updated_at_id_idx" ON public."{plan.temp_table}" (updated_at DESC, id DESC)')
         cur.execute(f'CREATE INDEX "{plan.temp_table}_published_at_idx" ON public."{plan.temp_table}" (published_at DESC)')
-        cur.execute(f'CREATE INDEX "{plan.temp_table}_video_feed_idx" ON public."{plan.temp_table}" (stored_at DESC) WHERE video_url IS NOT NULL')
+        cur.execute(f'CREATE INDEX "{plan.temp_table}_video_feed_idx" ON public."{plan.temp_table}" (stored_at DESC) WHERE item_role = ''video_variant'' AND video_url IS NOT NULL')
         cur.execute(
             f"""
             CREATE INDEX "{plan.temp_table}_video_feed_sort_time_idx"
             ON public."{plan.temp_table}" ((COALESCE(published_at, stored_at)) DESC, stored_at DESC, id DESC)
-            WHERE video_url IS NOT NULL AND video_url <> ''
+            WHERE item_role = 'video_variant' AND video_url IS NOT NULL AND video_url <> ''
             """
         )
         cur.execute(
             f"""
             CREATE INDEX "{plan.temp_table}_target_video_feed_sort_time_idx"
             ON public."{plan.temp_table}" (target_id, (COALESCE(published_at, stored_at)) DESC, stored_at DESC, id DESC)
-            WHERE video_url IS NOT NULL AND video_url <> ''
+            WHERE item_role = 'video_variant' AND video_url IS NOT NULL AND video_url <> ''
             """
         )
         cur.execute(f'CREATE INDEX "{plan.temp_table}_expires_at_idx" ON public."{plan.temp_table}" (expires_at)')

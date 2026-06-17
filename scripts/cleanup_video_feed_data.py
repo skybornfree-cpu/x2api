@@ -52,7 +52,7 @@ def main() -> int:
             DELETE FROM items i
             USING video_stats vs
             WHERE vs.item_id = i.id
-              AND i.video_url IS NOT NULL
+              AND i.item_role = 'video_variant'
               AND i.stored_at < NOW() - (%s || ' days')::interval
               AND vs.score <= %s
             """,
@@ -60,7 +60,7 @@ def main() -> int:
             SELECT COUNT(*)
             FROM items i
             INNER JOIN video_stats vs ON vs.item_id = i.id
-            WHERE i.video_url IS NOT NULL
+            WHERE i.item_role = 'video_variant'
               AND i.stored_at < NOW() - (%s || ' days')::interval
               AND vs.score <= %s
             """,
@@ -71,12 +71,12 @@ def main() -> int:
             "non_video_items",
             """
             DELETE FROM items
-            WHERE video_url IS NULL
+            WHERE item_role <> 'video_variant'
               AND stored_at < NOW() - (%s || ' days')::interval
             """,
             """
             SELECT COUNT(*) FROM items
-            WHERE video_url IS NULL
+            WHERE item_role <> 'video_variant'
               AND stored_at < NOW() - (%s || ' days')::interval
             """,
             interval_param(args.non_video_days),
@@ -86,7 +86,7 @@ def main() -> int:
             "regular_video_items",
             """
             DELETE FROM items i
-            WHERE i.video_url IS NOT NULL
+            WHERE i.item_role = 'video_variant'
               AND i.stored_at < NOW() - (%s || ' days')::interval
               AND COALESCE((SELECT vs.score FROM video_stats vs WHERE vs.item_id = i.id), 0) < %s
               AND NOT EXISTS (
@@ -98,7 +98,7 @@ def main() -> int:
             """,
             """
             SELECT COUNT(*) FROM items i
-            WHERE i.video_url IS NOT NULL
+            WHERE i.item_role = 'video_variant'
               AND i.stored_at < NOW() - (%s || ' days')::interval
               AND COALESCE((SELECT vs.score FROM video_stats vs WHERE vs.item_id = i.id), 0) < %s
               AND NOT EXISTS (
@@ -115,7 +115,7 @@ def main() -> int:
             "public_video_items",
             """
             DELETE FROM items i
-            WHERE i.video_url IS NOT NULL
+            WHERE i.item_role = 'video_variant'
               AND i.stored_at < NOW() - (%s || ' days')::interval
               AND COALESCE((SELECT vs.score FROM video_stats vs WHERE vs.item_id = i.id), 0) < %s
               AND EXISTS (
@@ -127,7 +127,7 @@ def main() -> int:
             """,
             """
             SELECT COUNT(*) FROM items i
-            WHERE i.video_url IS NOT NULL
+            WHERE i.item_role = 'video_variant'
               AND i.stored_at < NOW() - (%s || ' days')::interval
               AND COALESCE((SELECT vs.score FROM video_stats vs WHERE vs.item_id = i.id), 0) < %s
               AND EXISTS (
@@ -146,7 +146,7 @@ def main() -> int:
             DELETE FROM items i
             USING video_stats vs
             WHERE vs.item_id = i.id
-              AND i.video_url IS NOT NULL
+              AND i.item_role = 'video_variant'
               AND i.stored_at < NOW() - (%s || ' days')::interval
               AND vs.score >= %s
             """,
@@ -154,7 +154,7 @@ def main() -> int:
             SELECT COUNT(*)
             FROM items i
             INNER JOIN video_stats vs ON vs.item_id = i.id
-            WHERE i.video_url IS NOT NULL
+            WHERE i.item_role = 'video_variant'
               AND i.stored_at < NOW() - (%s || ' days')::interval
               AND vs.score >= %s
             """,

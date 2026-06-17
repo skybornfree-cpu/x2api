@@ -23,6 +23,21 @@ test("parseTarget understands keyword targets", () => {
   });
 });
 
+test("parseTargets rejects caoliu as a frontend subscription source", () => {
+  assert.throws(
+    () =>
+      parseTargets([
+        {
+          source: "caoliu",
+          kind: "site",
+          target: "https://t66y.com/thread0806.php?fid=16",
+          category: "adult",
+        },
+      ]),
+    /Unsupported target source\./,
+  );
+});
+
 test("parseTarget understands YouTube channel targets", () => {
   assert.deepEqual(parseTarget("youtube:UCE_M8A5yxnLfW0KghEeajjw"), {
     source: "youtube",

@@ -136,6 +136,17 @@ try:
         monitor_site as monitor_attach_site,
         normalize_attach_target_value,
     )
+    from collector.caoliu_source import (
+        CAOLIU_DEFAULT_BASE_URL,
+        CAOLIU_KIND,
+        CAOLIU_RETENTION_HOURS,
+        CAOLIU_SITE_NAME,
+        CAOLIU_SOURCE,
+        is_caoliu_target_url,
+        monitor_site as monitor_caoliu_site,
+        normalize_caoliu_target_key,
+        normalize_caoliu_target_value,
+    )
     from collector.dirtyship_refresh import refresh_playback_urls as refresh_dirtyship_playback_urls
     from collector.dirtyship_source import (
         DIRTYSHIP_CRITICAL_WINDOW_MINUTES,
@@ -408,6 +419,17 @@ except ModuleNotFoundError:
         is_attach_target_url,
         monitor_site as monitor_attach_site,
         normalize_attach_target_value,
+    )
+    from caoliu_source import (
+        CAOLIU_DEFAULT_BASE_URL,
+        CAOLIU_KIND,
+        CAOLIU_RETENTION_HOURS,
+        CAOLIU_SITE_NAME,
+        CAOLIU_SOURCE,
+        is_caoliu_target_url,
+        monitor_site as monitor_caoliu_site,
+        normalize_caoliu_target_key,
+        normalize_caoliu_target_value,
     )
     from dirtyship_refresh import refresh_playback_urls as refresh_dirtyship_playback_urls
     from dirtyship_source import (
@@ -768,6 +790,7 @@ LOCK_KEYS = {
     "xxxtik": 0x6B4D5F5858585449,
     "affair": 0x6B4D5F4146464149,
     "attach": 0x6B4D5F4154544143,
+    "caoliu": 0x6B4D5F43414F4C49,
     "dirtyship": 0x6B4D5F4449525459,
     "influencersgonewild": 0x6B4D5F494E464C47,
     "missav": 0x6B4D5F4D49535341,
@@ -1022,6 +1045,22 @@ def parse_target_value(target: str) -> dict[str, str]:
     if is_attach_target_url(normalized):
         value = normalize_attach_target_value(normalized)
         return {"source": ATTACH_SOURCE, "kind": ATTACH_KIND, "value": value, "normalized_value": normalize_site_target_key(value)}
+
+    if normalized.lower().startswith("caoliu:"):
+        value = normalize_caoliu_target_value(normalized[len("caoliu:") :].strip())
+        return {"source": CAOLIU_SOURCE, "kind": CAOLIU_KIND, "value": value, "normalized_value": normalize_caoliu_target_key(value)}
+
+    if normalized.lower().startswith("t66y:"):
+        value = normalize_caoliu_target_value(normalized[len("t66y:") :].strip())
+        return {"source": CAOLIU_SOURCE, "kind": CAOLIU_KIND, "value": value, "normalized_value": normalize_caoliu_target_key(value)}
+
+    if normalized.lower().startswith("t66y.com:"):
+        value = normalize_caoliu_target_value(normalized[len("t66y.com:") :].strip())
+        return {"source": CAOLIU_SOURCE, "kind": CAOLIU_KIND, "value": value, "normalized_value": normalize_caoliu_target_key(value)}
+
+    if is_caoliu_target_url(normalized):
+        value = normalize_caoliu_target_value(normalized)
+        return {"source": CAOLIU_SOURCE, "kind": CAOLIU_KIND, "value": value, "normalized_value": normalize_caoliu_target_key(value)}
 
     if normalized.lower().startswith("dirtyship:"):
         value = normalize_dirtyship_target_value(normalized[len("dirtyship:") :].strip())
@@ -1286,6 +1325,8 @@ def format_target_row(target_row: dict) -> str:
         return f"affair:{target_row['value']}"
     if target_row.get("source") == ATTACH_SOURCE:
         return f"attach:{target_row['value']}"
+    if target_row.get("source") == CAOLIU_SOURCE:
+        return f"caoliu:{target_row['value']}"
     if target_row.get("source") == DIRTYSHIP_SOURCE:
         return f"dirtyship:{target_row['value']}"
     if target_row.get("source") == INFLUENCERSGONEWILD_SOURCE:
@@ -1348,6 +1389,8 @@ def normalized_presentation_source(source: str | None) -> str:
         return AFFAIR_SOURCE
     if source_key in {"attach", "attach.bslqmdvk.cc", "hlcgw", "hlcgw.com"}:
         return ATTACH_SOURCE
+    if source_key in {"caoliu", "t66y", "t66y.com"}:
+        return CAOLIU_SOURCE
     if source_key in {"dirtyship", "dirtyship.com"}:
         return DIRTYSHIP_SOURCE
     if source_key in {"influencersgonewild", "influencersgonewild.com", "igw"}:
@@ -1400,6 +1443,7 @@ def source_display_name(source: str | None) -> str:
         XXXTIK_SOURCE: XXXTIK_SITE_NAME,
         AFFAIR_SOURCE: AFFAIR_SITE_NAME,
         ATTACH_SOURCE: ATTACH_SITE_NAME,
+        CAOLIU_SOURCE: CAOLIU_SITE_NAME,
         DIRTYSHIP_SOURCE: DIRTYSHIP_SITE_NAME,
         INFLUENCERSGONEWILD_SOURCE: INFLUENCERSGONEWILD_SITE_NAME,
         MISSAV_SOURCE: MISSAV_SITE_NAME,
@@ -4086,7 +4130,7 @@ def cleanup_records(conn, retention_days: int, max_records: int) -> dict[str, in
             DELETE FROM items i
             USING targets t
             WHERE t.id = i.target_id
-              AND t.source IN ('youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '1mtif', 'tikporn', 'badnews', 'bdrq', '91porna', '91porn', '91rb', '18j', 'avgood', '705hs', 'xxxtik', 'affair', 'attach', 'dirtyship', 'influencersgonewild', 'missav')
+              AND t.source IN ('youtube', 'heiliao', 'cg91', 'baoliao51', 'douyin', '18mh', 'rou', 'dadaafa', '1mtif', 'tikporn', 'badnews', 'bdrq', '91porna', '91porn', '91rb', '18j', 'avgood', '705hs', 'xxxtik', 'affair', 'attach', 'caoliu', 'dirtyship', 'influencersgonewild', 'missav')
               AND i.expires_at <= NOW()
             RETURNING i.id::text AS id
             """
@@ -4097,7 +4141,7 @@ def cleanup_records(conn, retention_days: int, max_records: int) -> dict[str, in
             DELETE FROM items i
             WHERE i.stored_at < %s
               AND (
-                i.video_url IS NULL
+                i.item_role <> 'video_variant'
                 OR NOT EXISTS (
                   SELECT 1
                   FROM video_stats vs
@@ -4126,9 +4170,9 @@ def cleanup_records(conn, retention_days: int, max_records: int) -> dict[str, in
                         ROW_NUMBER() OVER (
                             ORDER BY
                                 CASE
-                                  WHEN i.video_url IS NOT NULL AND COALESCE(vs.score, 0) >= 20 THEN 1
-                                  WHEN i.video_url IS NOT NULL AND COALESCE(tp.is_public_pool, FALSE) THEN 2
-                                  WHEN i.video_url IS NOT NULL THEN 3
+                                  WHEN i.item_role = 'video_variant' AND COALESCE(vs.score, 0) >= 20 THEN 1
+                                  WHEN i.item_role = 'video_variant' AND COALESCE(tp.is_public_pool, FALSE) THEN 2
+                                  WHEN i.item_role = 'video_variant' THEN 3
                                   ELSE 4
                                 END,
                                 i.stored_at DESC
@@ -5685,6 +5729,30 @@ def command_refresh_badnews_playback_urls(args) -> int:
     return 0
 
 
+def command_monitor_caoliu(args) -> int:
+    base_url = args.base_url or CAOLIU_DEFAULT_BASE_URL
+    retention_hours = args.retention_hours if args.retention_hours is not None else CAOLIU_RETENTION_HOURS
+    if args.retention_days is not None:
+        retention_hours = args.retention_days * 24
+    max_records = args.max_records if args.max_records is not None else DEFAULT_MAX_RECORDS
+    if args.dry_run and not DATABASE_URL:
+        stats = monitor_caoliu_site(None, base_url=base_url, max_pages=max(1, args.max_pages), retention_hours=max(1, retention_hours), public_pool=not args.private_pool, dry_run=True)
+        print(json.dumps(stats, ensure_ascii=False, indent=2, default=str))
+        return 0
+    with get_db_connection() as conn:
+        stats = monitor_caoliu_site(conn, base_url=base_url, max_pages=max(1, args.max_pages), retention_hours=max(1, retention_hours), public_pool=not args.private_pool, dry_run=args.dry_run)
+        if args.dry_run:
+            conn.rollback()
+        else:
+            stats = finalize_monitor_source_run(conn, stats, source=CAOLIU_SOURCE, compact_after_hours=1)
+        if not args.skip_cleanup and not args.dry_run:
+            cleanup_stats = cleanup_records(conn, max(1, (retention_hours + 23) // 24), max_records)
+            conn.commit()
+            stats = {**stats, "cleanup": cleanup_stats}
+    print(json.dumps(stats, ensure_ascii=False, indent=2, default=str))
+    return 0
+
+
 def command_monitor_bdrq(args) -> int:
     base_url = args.base_url or BDRQ_DEFAULT_BASE_URL
     retention_hours = args.retention_hours if args.retention_hours is not None else BDRQ_RETENTION_HOURS
@@ -6016,6 +6084,17 @@ def build_parser() -> argparse.ArgumentParser:
     badnews_monitor_parser.add_argument("--private-pool", action="store_true", help="不加入公共视频池")
     badnews_monitor_parser.add_argument("--dry-run", action="store_true", help="只解析和验证，不写入数据库")
     badnews_monitor_parser.set_defaults(func=command_monitor_badnews)
+
+    caoliu_monitor_parser = subparsers.add_parser("monitor-caoliu", help="单独抓取 草榴社区 达盖尔的旗帜 图文帖并入库")
+    caoliu_monitor_parser.add_argument("--base-url", default=CAOLIU_DEFAULT_BASE_URL, help="草榴社区版块入口；默认 https://t66y.com/thread0806.php?fid=16")
+    caoliu_monitor_parser.add_argument("--max-pages", type=int, default=5, help="单次最多分页数")
+    caoliu_monitor_parser.add_argument("--retention-hours", type=int, default=None, help=f"业务保留小时数，默认 {CAOLIU_RETENTION_HOURS}")
+    caoliu_monitor_parser.add_argument("--retention-days", type=int, default=None, help="兼容旧参数：业务保留天数")
+    caoliu_monitor_parser.add_argument("--max-records", type=int, default=None, help="最大保留记录数")
+    caoliu_monitor_parser.add_argument("--skip-cleanup", action="store_true", help="本轮监控后不执行清理")
+    caoliu_monitor_parser.add_argument("--private-pool", action="store_true", help="不加入公共视频池")
+    caoliu_monitor_parser.add_argument("--dry-run", action="store_true", help="只解析和验证，不写入数据库")
+    caoliu_monitor_parser.set_defaults(func=command_monitor_caoliu)
 
     bdrq_monitor_parser = subparsers.add_parser("monitor-bdrq", help="单独抓取 背德人妻 视频并入库")
     bdrq_monitor_parser.add_argument("--base-url", default=BDRQ_DEFAULT_BASE_URL, help="背德人妻站点入口；默认同时抓取两个内置列表")

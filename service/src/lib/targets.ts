@@ -1,4 +1,4 @@
-export type TargetSource = "twitter" | "youtube" | "heiliao" | "cg91" | "baoliao51" | "douyin" | "18mh" | "rou" | "dadaafa" | "18j" | "1mtif" | "tikporn" | "91porna" | "91porn" | "91rb" | "badnews" | "bdrq" | "avgood" | "705hs" | "xxxtik" | "affair" | "attach" | "dirtyship" | "influencersgonewild" | "missav";
+export type TargetSource = "twitter" | "youtube" | "heiliao" | "cg91" | "baoliao51" | "douyin" | "18mh" | "rou" | "dadaafa" | "18j" | "1mtif" | "tikporn" | "91porna" | "91porn" | "91rb" | "badnews" | "bdrq" | "avgood" | "705hs" | "xxxtik" | "affair" | "attach" | "caoliu" | "dirtyship" | "influencersgonewild" | "missav";
 export type TargetKind = "user" | "keyword" | "channel" | "site";
 
 export type ParsedTarget = {
@@ -1259,6 +1259,12 @@ function normalizeTargetSource(rawSource: unknown): TargetSource {
   }
 }
 
+function assertFrontendSubscriptionSourceAllowed(source: TargetSource) {
+  if (source === "caoliu") {
+    throw new Error("Unsupported target source.");
+  }
+}
+
 function normalizeTargetKind(rawKind: unknown, source: TargetSource): TargetKind | null {
   if (rawKind === undefined || rawKind === null) {
     return null;
@@ -1426,6 +1432,7 @@ function parseObjectTarget(candidate: { source?: unknown; kind?: unknown; target
   }
 
   const source = normalizeTargetSource(candidate.source);
+  assertFrontendSubscriptionSourceAllowed(source);
   const explicitKind = normalizeTargetKind(candidate.kind, source);
   let parsed: ParsedTarget;
   if (source === "youtube") {
@@ -1562,6 +1569,7 @@ export function parseTargets(rawTargets: unknown): ParsedTarget[] {
 
   for (const rawTarget of rawTargets) {
     const target = parseTargetInput(rawTarget);
+    assertFrontendSubscriptionSourceAllowed(target.source);
     const key = `${target.source}:${target.kind}:${target.normalizedValue}`;
     if (seen.has(key)) {
       continue;

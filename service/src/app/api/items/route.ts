@@ -34,6 +34,16 @@ function parseSince(raw: string | null) {
   return raw;
 }
 
+function parseSourceScope(raw: string | null) {
+  if (raw === null || raw === "") {
+    return undefined;
+  }
+  if (raw === "user" || raw === "public" || raw === "all") {
+    return raw;
+  }
+  throw new Error("Invalid sourceScope. Expected user, public, or all.");
+}
+
 export async function GET(request: Request) {
   try {
     const client = await requireClient();
@@ -47,6 +57,7 @@ export async function GET(request: Request) {
       tags: parseStringListParam(searchParams, "tag"),
       categories: parseStringListParam(searchParams, "category"),
       since: parseSince(searchParams.get("since")),
+      sourceScope: parseSourceScope(searchParams.get("sourceScope")),
     });
 
     return jsonOk(result);

@@ -32,6 +32,7 @@ test("toRow maps OpenSearch docs into item records", () => {
       tags: ["foo", "bar"],
       is_retweet: false,
       is_sensitive: false,
+      item_role: "entry",
     },
     new Set(["adult"]),
   );
@@ -53,6 +54,7 @@ test("buildItemsQuery uses search_after when cursor is present", () => {
     tagFilters: ["foo"],
     categoryFilters: ["news"],
     sinceFilter: "2026-06-19T00:00:00.000Z",
+    sourceScope: "all",
     cursor: {
       sortTime: "2026-06-19T00:05:00.000Z",
       storedAt: "2026-06-19T00:05:00.000Z",
@@ -65,5 +67,25 @@ test("buildItemsQuery uses search_after when cursor is present", () => {
     "2026-06-19T00:05:00.000Z",
     "2026-06-19T00:05:00.000Z",
     "item-1",
+  ]);
+});
+
+test("buildItemsQuery filters public pool when sourceScope=public", () => {
+  const query = __testables.buildItemsQuery({
+    targetIds: ["target-1"],
+    size: 10,
+    keyword: null,
+    targetFilter: null,
+    tagFilters: [],
+    categoryFilters: [],
+    sinceFilter: null,
+    sourceScope: "public",
+    cursor: null,
+  }) as { query: { bool: { filter: unknown[] } } };
+
+  assert.deepEqual(query.query.bool.filter.slice(0, 3), [
+    { range: { expires_at: { gt: "now" } } },
+    { term: { item_role: "entry" } },
+    { term: { is_public_pool: true } },
   ]);
 });

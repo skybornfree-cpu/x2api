@@ -104,6 +104,9 @@ type OpenSearchFeedSource = {
   dislikes?: number;
   skips?: number;
   shares?: number;
+  item_role?: string | null;
+  parent_item_id?: string | null;
+  variant_key?: string | null;
 };
 
 type OpenSearchHit = {
@@ -251,6 +254,7 @@ function videoKeyExpression(alias: "i" | "watched_item"): QueryChunk {
       WHEN ${alias}.metadata->>'xxxtik_post_uuid' IS NOT NULL THEN 'xxxtik:' || (${alias}.metadata->>'xxxtik_post_uuid')
       WHEN ${alias}.metadata->>'affair_video_id' IS NOT NULL THEN 'affair:' || (${alias}.metadata->>'affair_video_id')
       WHEN ${alias}.metadata->>'attach_detail_id' IS NOT NULL THEN 'attach:' || (${alias}.metadata->>'attach_detail_id')
+      WHEN ${alias}.metadata->>'caoliu_thread_id' IS NOT NULL THEN 'caoliu:' || (${alias}.metadata->>'caoliu_thread_id')
       WHEN ${alias}.metadata->>'dirtyship_detail_id' IS NOT NULL THEN 'dirtyship:' || (${alias}.metadata->>'dirtyship_detail_id')
       WHEN ${alias}.metadata->>'influencersgonewild_detail_id' IS NOT NULL THEN 'influencersgonewild:' || (${alias}.metadata->>'influencersgonewild_detail_id')
       WHEN ${alias}.metadata->>'missav_video_id' IS NOT NULL THEN 'missav:' || (${alias}.metadata->>'missav_video_id')
@@ -503,6 +507,9 @@ function toNumber(value: number | undefined) {
 
 function toRow(source: OpenSearchFeedSource): OpenSearchFeedRow | null {
   if (!source.id || !source.video_url || !source.stored_at || !source.expires_at || !source.video_url_expires_at) {
+    return null;
+  }
+  if ((source.item_role ?? "entry") !== "video_variant") {
     return null;
   }
 
@@ -812,6 +819,7 @@ function buildFeedQuery(input: {
   mode: "personalized" | "explore";
 }) {
   const filter: unknown[] = [
+    { term: { item_role: "video_variant" } },
     { term: { has_video: true } },
     { range: { expires_at: { gt: "now" } } },
     {

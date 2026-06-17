@@ -4,16 +4,37 @@ const DEFAULT_ITEMS_INDEX = "x2_items";
 
 let client: Client | null = null;
 
+function parseExplicitBoolean(value: string | undefined) {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return false;
+}
+
 export function getOpenSearchItemsIndex() {
   return process.env.OPENSEARCH_ITEMS_INDEX?.trim() || DEFAULT_ITEMS_INDEX;
 }
 
 export function isOpenSearchFeedEnabled() {
+  const explicit = parseExplicitBoolean(process.env.OPENSEARCH_FEED_ENABLED);
+  if (explicit !== null) {
+    return explicit;
+  }
   return Boolean(process.env.OPENSEARCH_URL?.trim());
 }
 
 export function assertOpenSearchFeedEnabled(context: string) {
   if (!isOpenSearchFeedEnabled()) {
+    throw new Error(`[${context}] OpenSearch feed is required but OPENSEARCH_FEED_ENABLED is disabled.`);
+  }
+  if (!process.env.OPENSEARCH_URL?.trim()) {
     throw new Error(`[${context}] OpenSearch feed is required but OPENSEARCH_URL is not configured.`);
   }
 }

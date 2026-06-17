@@ -157,7 +157,8 @@ def main() -> int:
                 FROM items i
                 INNER JOIN targets t ON t.id = i.target_id
                 LEFT JOIN target_profiles tp ON tp.target_id = t.id
-                WHERE i.video_url IS NOT NULL
+                WHERE i.item_role = 'video_variant'
+                  AND i.video_url IS NOT NULL
                   AND i.video_url <> ''
                   AND NOT EXISTS (
                     SELECT 1 FROM item_tags it WHERE it.item_id = i.id

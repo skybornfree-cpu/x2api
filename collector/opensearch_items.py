@@ -6,6 +6,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Iterable
 from urllib.parse import urlparse
+import hashlib
 
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -100,12 +101,68 @@ def _normalize_tags(values):
     return normalized
 
 
+def _normalize_variant_key(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _stable_variant_key(video_url: str | None, metadata: dict | None, guid: str) -> str | None:
+    direct = _normalize_variant_key(video_url)
+    if direct:
+        return direct
+    metadata = metadata or {}
+    for key in (
+        "variant_key",
+        "youtube_video_id",
+        "heiliao_video_id",
+        "cg91_video_id",
+        "baoliao51_video_id",
+        "douyin_video_id",
+        "mh18_video_id",
+        "rou_video_id",
+        "dadaafa_video_id",
+        "j18_video_id",
+        "mtif_video_id",
+        "tikporn_video_id",
+        "porna91_video_id",
+        "porn91_video_id",
+        "rb91_video_id",
+        "badnews_video_id",
+        "bdrq_video_id",
+        "avgood_video_id",
+        "hs705_video_id",
+        "xxxtik_post_uuid",
+        "affair_video_id",
+        "attach_detail_id",
+        "dirtyship_detail_id",
+        "influencersgonewild_detail_id",
+        "missav_video_id",
+        "caoliu_thread_id",
+    ):
+        candidate = _normalize_variant_key(metadata.get(key))
+        if candidate:
+            return candidate
+    return hashlib.sha1(guid.encode("utf-8")).hexdigest()
+
+
+def _compute_group_key(guid: str, metadata: dict | None) -> str:
+    metadata = metadata or {}
+    for key in ("group_key", "thread_group_key", "entry_guid"):
+        candidate = _normalize_variant_key(metadata.get(key))
+        if candidate:
+            return candidate
+    return guid
+
+
 def _compute_target_display(source: str | None, kind: str | None, value: str | None):
     if source == "youtube":
         return f"youtube:{value}"
     if source in {
         "heiliao", "cg91", "baoliao51", "douyin", "18mh", "rou", "dadaafa",
         "18j", "1mtif", "tikporn", "91porna", "91porn", "91rb", "badnews",
+        "caoliu",
         "bdrq", "avgood", "705hs", "xxxtik", "affair", "attach", "dirtyship",
         "influencersgonewild", "missav",
     }:
@@ -121,6 +178,7 @@ def _compute_target_link(source: str | None, kind: str | None, value: str | None
     if source in {
         "heiliao", "cg91", "baoliao51", "douyin", "18mh", "rou", "dadaafa",
         "18j", "1mtif", "tikporn", "91porna", "91porn", "91rb", "badnews",
+        "caoliu",
         "bdrq", "avgood", "705hs", "xxxtik", "affair", "attach", "dirtyship",
         "influencersgonewild", "missav",
     }:
@@ -170,6 +228,13 @@ def index_item_document(
     item_id: str,
     target_id: str,
     guid: str,
+    item_role: str = "entry",
+    parent_item_id: str | None = None,
+    group_key: str | None = None,
+    variant_key: str | None = None,
+    variant_index: int | None = None,
+    video_key: str | None = None,
+    video_count: int | None = None,
     video_url: str | None,
     playback_headers: dict | None,
     cover_url: str | None,
@@ -214,11 +279,17 @@ def index_item_document(
     category_value = category.strip().lower() if isinstance(category, str) and category.strip() else None
     target = _compute_target_display(target_context.get("source"), target_context.get("kind"), target_context.get("value"))
     doc = {
+        "doc_schema_version": 2,
         "id": str(item_id),
         "target_id": str(target_id),
         "guid": guid,
+        "item_role": item_role,
+        "parent_item_id": str(parent_item_id) if parent_item_id else None,
+        "group_key": group_key,
+        "variant_key": variant_key,
+        "variant_index": variant_index,
         "video_url": video_url,
-        "video_key": video_url,
+        "video_key": video_key or variant_key or video_url,
         "playback_headers": playback_headers or None,
         "cover_url": cover_url,
         "title": title,
@@ -249,7 +320,10 @@ def index_item_document(
         "is_public_pool": bool(target_context.get("is_public_pool")),
         "is_retweet": bool(is_retweet),
         "is_sensitive": bool(target_context.get("is_sensitive")),
-        "has_video": bool(video_url),
+        "has_video": (video_count or 0) > 0 or bool(video_url),
+        "has_images": bool(images),
+        "image_count": len([image for image in (images or []) if isinstance(image, str) and image]),
+        "video_count": max(int(video_count or 0), 1 if video_url else 0),
         "score": 0.0,
         "quality_score": 0.0,
         "impressions": 0,
@@ -275,6 +349,7 @@ def update_item_playback(
     *,
     video_url: str | None,
     video_url_expires_at,
+    video_key: str | None = None,
     playback_headers: dict | None = None,
     cover_url: str | None = None,
 ) -> bool:
@@ -287,7 +362,7 @@ def update_item_playback(
 
     payload = {
         "video_url": video_url,
-        "video_key": video_url,
+        "video_key": video_key or video_url,
         "video_url_expires_at": _to_iso(video_url_expires_at),
         "has_video": bool(video_url),
     }
@@ -415,18 +490,105 @@ def upsert_item_record(
     images: list[str] | None,
     playback_headers: dict | None = None,
 ) -> tuple[str | None, bool]:
+    item_role = "video_variant" if video_url else "entry"
+    raw_variant_index = (metadata or {}).get("variant_index") if isinstance(metadata, dict) else None
+    try:
+        variant_index = int(raw_variant_index) if raw_variant_index is not None else None
+    except (TypeError, ValueError):
+        variant_index = None
+    group_key = _compute_group_key(guid, metadata)
+    variant_key = _stable_variant_key(video_url, metadata, guid) if item_role == "video_variant" else None
     resolved_expires_at = _resolve_expiry(expires_at)
     resolved_video_url_expires_at = _resolve_expiry(video_url_expires_at, fallback=resolved_expires_at)
+
+    parent_item_id: str | None = None
+    if item_role == "video_variant":
+        entry_guid = _normalize_variant_key((metadata or {}).get("entry_guid")) or f"{group_key}#entry"
+        entry_metadata = dict(metadata or {})
+        entry_metadata["group_key"] = group_key
+        entry_video_count = int(entry_metadata.get("video_count") or 1)
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                INSERT INTO items (
+                    target_id, guid, item_role, parent_item_id, group_key, variant_key, variant_index,
+                    video_url, expires_at, video_url_expires_at, published_at, stored_at, is_retweet, metadata
+                )
+                VALUES (%s, %s, 'entry', NULL, %s, NULL, NULL, NULL, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (target_id, guid) DO UPDATE SET
+                    item_role = 'entry',
+                    group_key = EXCLUDED.group_key,
+                    expires_at = EXCLUDED.expires_at,
+                    video_url_expires_at = EXCLUDED.video_url_expires_at,
+                    published_at = COALESCE(items.published_at, EXCLUDED.published_at),
+                    metadata = COALESCE(items.metadata, '{}'::jsonb) || EXCLUDED.metadata
+                RETURNING id::text AS id
+                """,
+                (
+                    target_id,
+                    entry_guid,
+                    group_key,
+                    resolved_expires_at,
+                    resolved_video_url_expires_at,
+                    published_at,
+                    stored_at,
+                    is_retweet,
+                    Jsonb(entry_metadata),
+                ),
+            )
+            row = cur.fetchone()
+        parent_item_id = str(row["id"]) if row and row.get("id") else None
+        if parent_item_id:
+            index_item_document(
+                conn,
+                item_id=parent_item_id,
+                target_id=str(target_id),
+                guid=entry_guid,
+                item_role="entry",
+                parent_item_id=None,
+                group_key=group_key,
+                variant_key=None,
+                variant_index=None,
+                video_key=None,
+                video_count=entry_video_count,
+                video_url=None,
+                playback_headers=None,
+                cover_url=cover_url,
+                title=title,
+                caption=caption,
+                content=content,
+                author=author,
+                fullname=fullname,
+                display_author=display_author,
+                display_handle=display_handle,
+                author_profile_url=author_profile_url,
+                author_profile_platform=author_profile_platform,
+                x_url=x_url,
+                link=link,
+                images=images,
+                published_at=published_at,
+                stored_at=stored_at,
+                updated_at=stored_at,
+                expires_at=resolved_expires_at,
+                video_url_expires_at=resolved_video_url_expires_at,
+                is_retweet=is_retweet,
+            )
+
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
             INSERT INTO items (
-                target_id, guid,
+                target_id, guid, item_role, parent_item_id, group_key, variant_key, variant_index,
                 video_url, expires_at, video_url_expires_at,
                 published_at, stored_at, is_retweet, metadata
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (target_id, guid) DO UPDATE SET
+                item_role = EXCLUDED.item_role,
+                parent_item_id = EXCLUDED.parent_item_id,
+                group_key = EXCLUDED.group_key,
+                variant_key = EXCLUDED.variant_key,
+                variant_index = EXCLUDED.variant_index,
                 video_url = EXCLUDED.video_url,
                 expires_at = EXCLUDED.expires_at,
                 video_url_expires_at = EXCLUDED.video_url_expires_at,
@@ -437,6 +599,11 @@ def upsert_item_record(
             (
                 target_id,
                 guid,
+                item_role,
+                parent_item_id,
+                group_key,
+                variant_key,
+                variant_index if item_role == "video_variant" else None,
                 video_url,
                 resolved_expires_at,
                 resolved_video_url_expires_at,
@@ -457,6 +624,13 @@ def upsert_item_record(
         item_id=item_id,
         target_id=str(target_id),
         guid=guid,
+        item_role=item_role,
+        parent_item_id=parent_item_id,
+        group_key=group_key,
+        variant_key=variant_key,
+        variant_index=variant_index if item_role == "video_variant" else None,
+        video_key=variant_key,
+        video_count=int((metadata or {}).get("video_count") or (1 if video_url else 0)),
         video_url=video_url,
         playback_headers=playback_headers,
         cover_url=cover_url,
@@ -492,6 +666,7 @@ def refresh_item_playback(
     playback_headers: dict | None = None,
     cover_url: str | None = None,
 ) -> bool:
+    video_key = _stable_variant_key(video_url, metadata, item_id)
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -509,6 +684,7 @@ def refresh_item_playback(
         item_id,
         video_url=video_url,
         video_url_expires_at=video_url_expires_at,
+        video_key=video_key,
         playback_headers=playback_headers,
         cover_url=cover_url,
     )
@@ -544,6 +720,29 @@ def delete_items(item_ids: Iterable[str]) -> int:
         if delete_item(item_id):
             deleted += 1
     return deleted
+
+
+def delete_items_by_source(source: str) -> int:
+    normalized = str(source or "").strip().lower()
+    if not normalized or not is_opensearch_write_enabled():
+        return 0
+
+    client = get_client()
+    if client is None:
+        return 0
+
+    try:
+        response = client.delete_by_query(
+            index=get_items_index(),
+            body={"query": {"term": {"source": normalized}}},
+            refresh=False,
+            conflicts="proceed",
+        )
+        deleted = response.get("deleted") if isinstance(response, dict) else None
+        return int(deleted or 0)
+    except Exception as exc:
+        print(f"[opensearch] delete_by_source failed for {normalized}: {exc}", file=sys.stderr)
+        return 0
 
 
 def update_item_stats(item_id: str, stats: dict[str, int | float]) -> bool:
